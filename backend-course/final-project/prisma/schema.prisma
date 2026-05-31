@@ -1,0 +1,119 @@
+// 博客平台数据库 Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户角色枚举
+enum Role {
+  USER      // 普通用户
+  ADMIN     // 管理员
+}
+
+// 文章状态枚举
+enum PostStatus {
+  DRAFT     // 草稿
+  PUBLISHED // 已发布
+}
+
+// 用户模型
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  avatar    String?
+  bio       String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联
+  posts    Post[]
+  comments Comment[]
+
+  @@map("users")
+}
+
+// 文章模型
+model Post {
+  id          String     @id @default(cuid())
+  title       String
+  content     String
+  slug        String     @unique
+  excerpt     String?    // 摘要
+  coverImage  String?    @map("cover_image")
+  status      PostStatus @default(DRAFT)
+  viewCount   Int        @default(0) @map("view_count")
+  authorId    String     @map("author_id")
+  categoryId  String?    @map("category_id")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  publishedAt DateTime?  @map("published_at")
+
+  // 关联
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags     Tag[]     @relation("PostTags")
+  comments Comment[]
+
+  @@index([authorId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([slug])
+  @@map("posts")
+}
+
+// 分类模型
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // 关联
+  posts Post[]
+
+  @@map("categories")
+}
+
+// 标签模型
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // 关联（多对多）
+  posts Post[] @relation("PostTags")
+
+  @@map("tags")
+}
+
+// 评论模型
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  authorId  String   @map("author_id")
+  postId    String   @map("post_id")
+  parentId  String?  @map("parent_id") // 自引用，用于嵌套评论
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+
+  @@index([authorId])
+  @@index([postId])
+  @@index([parentId])
+  @@map("comments")
+}
