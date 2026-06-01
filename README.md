@@ -11,6 +11,7 @@
 | 教程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
 | [backend-course](./backend-course/) | 全栈后端开发 | Node.js + Express + PostgreSQL + Docker，32 课时 + 完整项目 | 已完成 |
+| [spider-course](./spider-course/) | Python 爬虫 | Python + requests + Playwright + Scrapy，29 课时 + 综合项目 | 进行中 |
 
 ## 特点
 
