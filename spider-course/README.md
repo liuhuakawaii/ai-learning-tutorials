@@ -13,7 +13,7 @@
 
 - 独立编写爬虫采集任意静态/动态网页数据
 - 使用 Scrapy 框架构建工程化的采集系统
-- 处理反爬、验证码、登录态等常见难题
+- 理解常见反爬机制，并用限速、重试、登录态管理等合规方式提升采集稳定性
 - 将采集数据清洗后存入数据库，通过 API 对外展示
 
 ## 技术栈
@@ -21,7 +21,7 @@
 | 类别 | 技术 |
 |------|------|
 | 语言 | Python 3.10+ |
-| HTTP 请求 | requests、httpx |
+| HTTP 请求 | requests |
 | 静态解析 | BeautifulSoup4、lxml |
 | 动态渲染 | Playwright |
 | 爬虫框架 | Scrapy |
@@ -49,12 +49,12 @@
 │  HTTP   requests HTML  BS4   CSS  分页  数据  阶段               │
 │  DevTools 入门  结构  解析  XPath 翻页  导出  实战               │
 │                                                                  │
-│  第三阶段：动态网页与反爬（2-3 周）                                │
+│  第三阶段：动态网页与合规采集（2-3 周）                              │
 │  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐                  │
 │  │01│→│02│→│03│→│04│→│05│→│06│→│07│                  │
 │  └───┘ └───┘ └───┘ └───┘ └───┘ └───┘ └───┘                  │
-│  动态   Play-  浏览器 反爬  伪装  验证码 阶段                     │
-│  渲染   wright  自动化 机制  代理  登录态 实战                     │
+│  动态   Play-  浏览器 反爬  请求  验证码 阶段                     │
+│  渲染   wright  自动化 机制  策略  登录态 实战                     │
 │                                                                  │
 │  第四阶段：Scrapy 框架与工程化（2-3 周）                           │
 │  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐                        │
@@ -100,14 +100,14 @@
 7. [数据导出基础](stage2-http-and-parsing/07-数据导出基础.md) — CSV、JSON 写入
 8. [阶段实战：quotes.toscrape.com 采集](stage2-http-and-parsing/08-阶段实战-quotes.toscrape.com采集.md) — 综合练习
 
-### 第三阶段：动态网页与反爬
+### 第三阶段：动态网页与合规采集
 
 1. [动态渲染原理](stage3-dynamic-and-anti-crawl/01-动态渲染原理.md) — CSR vs SSR、JS 渲染
 2. [Playwright 入门](stage3-dynamic-and-anti-crawl/02-Playwright入门.md) — 安装、启动、基本操作
 3. [浏览器自动化实战](stage3-dynamic-and-anti-crawl/03-浏览器自动化实战.md) — 点击、滚动、等待
-4. [常见反爬机制](stage3-dynamic-and-anti-crawl/04-常见反爬机制.md) — User-Agent、频率、IP 封禁
-5. [请求头伪装与代理池](stage3-dynamic-and-anti-crawl/05-请求头伪装与代理池.md) — Headers、代理 IP
-6. [验证码与登录态处理](stage3-dynamic-and-anti-crawl/06-验证码与登录态处理.md) — Cookie、Session
+4. [常见反爬机制](stage3-dynamic-and-anti-crawl/04-常见反爬机制.md) — User-Agent、频率、IP 限制
+5. [请求头与请求策略](stage3-dynamic-and-anti-crawl/05-请求头伪装与代理池.md) — Headers、延迟、重试
+6. [验证码与登录态处理](stage3-dynamic-and-anti-crawl/06-验证码与登录态处理.md) — Cookie、Session、手动介入
 7. [阶段实战：books.toscrape.com 全站采集](stage3-dynamic-and-anti-crawl/07-阶段实战-books.toscrape.com全站采集.md) — 综合练习
 
 ### 第四阶段：Scrapy 框架与工程化
