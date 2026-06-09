@@ -398,7 +398,7 @@ BOT_NAME = "myspider"
 ROBOTSTXT_OBEY = True
 
 # 并发请求数（同时派出几个"快递员"）
-CONCURRENT_REQUESTS = 16        # 默认 16，别开太大以免被封
+CONCURRENT_REQUESTS = 16        # 默认 16，真实站点应按承载能力调低
 
 # 下载延迟（每个请求之间等多久，单位：秒）
 DOWNLOAD_DELAY = 1              # 礼貌爬虫，每秒最多请求 1 次
