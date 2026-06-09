@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Performance Rescue - Optimized Page</title>
+    <link
+      rel="preload"
+      as="image"
+      href="./assets/hero-optimized.jpg"
+      fetchpriority="high"
+    />
+    <link rel="stylesheet" href="./styles/optimized.css" />
+    <script src="./src/vitals.js" defer></script>
+    <script src="./src/optimized.js" defer></script>
+  </head>
+  <body data-page="optimized">
+    <header class="topbar">
+      <div class="brand">Rescue Shop</div>
+      <label class="search">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Search visible products" />
+      </label>
+      <button id="sortButton">Sort by score</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <img
+          src="./assets/hero-optimized.jpg"
+          width="1200"
+          height="560"
+          alt="Workspace with analytics dashboard"
+          fetchpriority="high"
+        />
+        <div>
+          <p class="eyebrow">Optimized target</p>
+          <h1>Performance Rescue Lab</h1>
+          <p>Compare this page with the slow baseline and explain each improvement with evidence.</p>
+          <button id="addButton">Add bundle to cart</button>
+        </div>
+      </section>
+
+      <section class="promo-slot" aria-label="Reserved promo slot">
+        <strong>Stable promo slot</strong>
+        <span>No layout shift when async content arrives.</span>
+      </section>
+
+      <section class="metrics-row">
+        <article><strong>&lt; 2.5s</strong><span>LCP goal</span></article>
+        <article><strong>&lt; 0.1</strong><span>CLS goal</span></article>
+        <article><strong>&lt; 200ms</strong><span>INP goal</span></article>
+      </section>
+
+      <section class="catalog">
+        <div class="section-heading">
+          <h2>Product Catalog</h2>
+          <p id="resultCount">Rendering a virtualized window...</p>
+        </div>
+        <div id="productList" class="product-list"></div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -16,12 +16,18 @@
 
 ## 阶段项目
 
-为项目接入性能预算和线上指标采集，建立性能回归报告。
+使用 demo 中的三部分完成治理闭环：
+
+- `src/vitals.js`：采集 LCP、CLS、INP、Long Task 和自定义交互耗时
+- `monitor.html`：查看本地采集到的指标
+- `lighthouserc.js`：用 Lighthouse CI 检查性能预算
+
+输出 `reports/stage5-monitoring-report.md`。
 
 ## 验收标准
 
 - 有明确性能预算
 - CI 能发现明显性能退化
-- 线上能采集 LCP、INP、CLS
+- 本地能采集 LCP、INP、CLS 和慢交互
 - 性能报告可持续更新
-
+- 能说明预算超标后的处理流程

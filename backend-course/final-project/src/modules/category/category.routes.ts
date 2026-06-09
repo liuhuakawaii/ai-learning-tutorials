@@ -1,11 +1,11 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 import { categoryController } from './category.controller';
 import { authMiddleware } from '../../middleware/auth';
 import { requireRole } from '../../middleware/role';
 import { validate } from '../../middleware/validate';
 import { createCategorySchema, updateCategorySchema, categoryIdSchema } from './category.schema';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 router.get('/', categoryController.list);
 router.post('/', authMiddleware, requireRole('ADMIN'), validate(createCategorySchema), categoryController.create);

@@ -1,0 +1,13 @@
+{
+  "name": "ai-knowledge-workspace-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline RAG and eval lab for the AI application course.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check-demo-files.cjs",
+    "ingest": "node src/build-index.mjs",
+    "ask": "node src/ask.mjs",
+    "eval": "node src/eval.mjs"
+  }
+}

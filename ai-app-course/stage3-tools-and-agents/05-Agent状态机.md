@@ -1,4 +1,4 @@
-# 第5课：Agent 状态机——pending、running、blocked、done、failed
+﻿# 第5课：Agent 状态机——pending、running、blocked、done、failed
 
 > **课程定位**：设计可靠的 Agent 任务状态
 > **前置知识**：第 4 课的多步骤任务
@@ -149,7 +149,7 @@ interface AgentState {
   id: string
   status: AgentStatus
   task: string
-  messages: OpenAI.ChatCompletionMessageParam[]
+  input: ResponseInputMessage[]
   steps: AgentStep[]
   result?: string
   error?: string
@@ -166,7 +166,7 @@ export class Agent {
       id: `agent-${Date.now()}`,
       status: AgentStatus.PENDING,
       task,
-      messages: [
+      input: [
         {
           role: 'system',
           content: '你是一个能使用工具完成任务的助手。',
@@ -202,31 +202,31 @@ export class Agent {
         }
 
         // 调用模型
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: this.state.messages,
+        const response = await openai.responses.create({
+          model: 'gpt-5.5',
+          input: this.state.messages,
           tools: toolRegistry.getToolSchemas(),
           tool_choice: 'auto',
         })
 
-        const message = response.choices[0].message
+        const toolCalls = response.output.filter((item) => item.type === 'function_call')
 
         // 如果没有工具调用，任务完成
-        if (!message.tool_calls) {
-          this.state.result = message.content || ''
+        if (toolCalls.length === 0) {
+          this.state.result = response.output_text || ''
           this.updateStatus(AgentStatus.DONE)
           return
         }
 
         // 执行工具调用
-        this.state.messages.push(message)
+        this.state.messages.push(...response.output)
 
-        for (const toolCall of message.tool_calls) {
+        for (const toolCall of toolCalls) {
           const step: AgentStep = {
             id: `step-${this.state.steps.length}`,
             toolCall: {
-              name: toolCall.function.name,
-              args: JSON.parse(toolCall.function.arguments),
+              name: toolCall.name,
+              args: JSON.parse(toolCall.arguments),
             },
             status: 'running',
           }
@@ -234,7 +234,7 @@ export class Agent {
 
           // 执行工具
           const result = await toolRegistry.execute(
-            toolCall.function.name,
+            toolCall.name,
             step.toolCall.args
           )
 
@@ -243,9 +243,9 @@ export class Agent {
 
           // 把结果加入消息
           this.state.messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result),
+            type: 'function_call_output',
+            call_id: toolCall.call_id,
+            output: JSON.stringify(result),
           })
         }
 
@@ -373,7 +373,7 @@ interface StoredAgent {
   id: string
   status: AgentStatus
   task: string
-  messages: string  // JSON
+  input: string  // JSON
   steps: string     // JSON
   result?: string
   error?: string
@@ -419,7 +419,7 @@ export async function loadAgentState(id: string): Promise<Agent | null> {
     id: row.id,
     status: row.status,
     task: row.task,
-    messages: JSON.parse(row.messages),
+    input: JSON.parse(row.messages),
     steps: JSON.parse(row.steps),
     result: row.result,
     error: row.error,

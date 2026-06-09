@@ -1,0 +1,157 @@
+@font-face {
+  font-family: RescueSlow;
+  src: url("https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTcviYwYZ8UA3J58.woff2") format("woff2");
+  font-display: block;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: RescueSlow, Arial, sans-serif;
+  color: #1f2933;
+  background: #f5f7fb;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 32px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 18px rgba(15, 23, 42, 0.12);
+}
+
+.brand {
+  font-weight: 800;
+}
+
+.search {
+  display: grid;
+  gap: 4px;
+  min-width: 280px;
+}
+
+input,
+button {
+  min-height: 40px;
+  border: 1px solid #b8c2d4;
+  padding: 0 14px;
+  background: #fff;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.hero {
+  min-height: 520px;
+  display: grid;
+  align-items: end;
+  padding: 56px;
+  color: white;
+  background-image:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.15), rgba(17, 24, 39, 0.72)),
+    url("https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=3200&q=95");
+  background-size: cover;
+  background-position: center;
+}
+
+.hero h1 {
+  max-width: 680px;
+  margin: 0 0 16px;
+  font-size: 64px;
+}
+
+.hero p {
+  max-width: 620px;
+  font-size: 20px;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin: 28px 0;
+}
+
+.metrics-row article,
+.product-card {
+  background: white;
+  box-shadow: 0 12px 26px rgba(31, 41, 55, 0.12);
+  padding: 20px;
+}
+
+.metrics-row strong {
+  display: block;
+  font-size: 32px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+}
+
+.product-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.product-card {
+  min-height: 280px;
+}
+
+.product-image {
+  min-height: 120px;
+  margin: -20px -20px 16px;
+  background: linear-gradient(135deg, #9bbcff, #ffd36f);
+}
+
+#promoMount .promo {
+  margin-top: 18px;
+  padding: 24px;
+  background: #fff7d6;
+  border: 1px solid #f6c95f;
+}
+
+@media (max-width: 760px) {
+  .topbar,
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero {
+    min-height: 460px;
+    padding: 28px;
+  }
+
+  .hero h1 {
+    font-size: 40px;
+  }
+
+  .metrics-row,
+  .product-list {
+    grid-template-columns: 1fr;
+  }
+}

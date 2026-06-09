@@ -1,4 +1,4 @@
-# 从零到一：AI 应用开发实战课程
+﻿# 从零到一：AI 应用开发实战课程
 
 > 面向前端开发者的 AI 产品工程课：从大模型 API 基础，到 RAG、工具调用、Agent 工作流，再到可上线的 AI 助手产品。
 
@@ -28,6 +28,20 @@
 | 后端 | Next.js Route Handlers 或 Node.js 服务 |
 | 质量 | Evals、日志、成本统计、失败回放 |
 | 部署 | Vercel / Docker / 云数据库 |
+
+## 贯穿项目
+
+本课程使用 `AI Knowledge Workspace` 作为贯穿项目。为了让学习过程可验证，仓库提供一个离线 project kit：
+
+```bash
+cd ai-app-course/final-project/ai-knowledge-workspace-kit
+npm run check
+npm run ingest
+npm run ask -- "为什么回答必须带引用"
+npm run eval
+```
+
+这个 kit 先用本地 Markdown 资料练习文档切分、检索、引用、拒答和评估。接入真实 OpenAI Responses API、流式响应、工具调用和用户系统，是后续阶段的扩展任务。
 
 ## 学习路线
 

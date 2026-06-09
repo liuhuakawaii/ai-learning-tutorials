@@ -28,6 +28,23 @@
 | 数据存储 | CSV、JSON、SQLite |
 | 数据清洗 | pandas |
 
+## 贯穿项目
+
+本课程新增 `Crawl To Insight` 作为贯穿项目。它先使用离线 HTML fixtures，避免外部网站变动、网络失败和合规边界不清：
+
+```bash
+cd spider-course/final-project/crawl-to-insight-demo
+npm run check
+npm run crawl
+```
+
+输出：
+
+- `output/books.json`
+- `output/books.csv`
+
+在掌握离线解析、分页、去重和导出后，再扩展到公开练习站或自有授权数据源。
+
 ## 学习路线图
 
 ```
@@ -106,7 +123,7 @@
 2. [Playwright 入门](stage3-dynamic-and-anti-crawl/02-Playwright入门.md) — 安装、启动、基本操作
 3. [浏览器自动化实战](stage3-dynamic-and-anti-crawl/03-浏览器自动化实战.md) — 点击、滚动、等待
 4. [常见反爬机制](stage3-dynamic-and-anti-crawl/04-常见反爬机制.md) — User-Agent、频率、IP 限制
-5. [请求头与请求策略](stage3-dynamic-and-anti-crawl/05-请求头伪装与代理池.md) — Headers、延迟、重试
+5. [请求头与请求策略](stage3-dynamic-and-anti-crawl/05-请求头与请求策略.md) — Headers、延迟、重试
 6. [验证码与登录态处理](stage3-dynamic-and-anti-crawl/06-验证码与登录态处理.md) — Cookie、Session、手动介入
 7. [阶段实战：books.toscrape.com 全站采集](stage3-dynamic-and-anti-crawl/07-阶段实战-books.toscrape.com全站采集.md) — 综合练习
 
@@ -127,6 +144,10 @@
 4. [API 采集技巧](stage5-data-and-project/04-API采集技巧.md) — JSON API、分页、认证
 5. [robots.txt 与法律道德](stage5-data-and-project/05-robots.txt与法律道德.md) — 合规爬取
 6. [综合实战：数据采集与展示系统](stage5-data-and-project/06-综合实战-数据采集与展示系统.md) — 完整项目
+
+### 最终项目
+
+- [Crawl To Insight 项目说明](final-project/项目说明.md)
 
 ## 学习建议
 

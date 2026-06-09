@@ -425,13 +425,11 @@ CSV 文件中 `tags` 用逗号分隔的字符串表示，JSON 文件则保留了
 
 ### 7.2 请求头设置
 
-加上 User-Agent 让请求看起来更像正常浏览器：
+加上 User-Agent，让请求明确表达客户端能力和任务来源：
 
 ```python
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                  'AppleWebKit/537.36 (KHTML, like Gecko) '
-                  'Chrome/120.0.0.0 Safari/537.36'
+    'User-Agent': 'QuotesLearningScraper/1.0 (+mailto:contact@example.com)'
 }
 response = requests.get(url, headers=HEADERS, timeout=10)
 ```

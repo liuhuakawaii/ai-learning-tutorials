@@ -6,7 +6,7 @@
 
 ```bash
 # 1. 安装依赖
-npm install
+pnpm install
 
 # 2. 配置环境变量
 cp .env.example .env
@@ -16,11 +16,11 @@ cp .env.example .env
 docker-compose up -d postgres redis
 
 # 4. 数据库迁移
-npx prisma generate
-npx prisma migrate dev --name init
+pnpm prisma generate
+pnpm prisma migrate dev --name init
 
 # 5. 启动开发服务器
-npm run dev
+pnpm dev
 ```
 
 访问：
@@ -33,6 +33,32 @@ npm run dev
 ```bash
 docker-compose up -d
 ```
+
+## 本地验证
+
+```bash
+pnpm build
+
+# Prisma 校验需要 DATABASE_URL，可先复制 .env.example 为 .env
+pnpm prisma validate
+```
+
+## 课程阶段映射
+
+| 阶段 | 对应项目能力 |
+|------|--------------|
+| 第一阶段 | Express 应用入口、路由、中间件、统一错误处理 |
+| 第二阶段 | Prisma schema、迁移、CRUD、分页和关联查询 |
+| 第三阶段 | JWT、RBAC、上传、Swagger、日志和 Docker |
+| 第四阶段 | Redis、缓存、实时/异步能力和安全加固扩展点 |
+
+## 验收建议
+
+- `pnpm build` 通过
+- `pnpm prisma validate` 通过
+- `/health` 可访问
+- Swagger 文档可打开
+- 注册、登录、创建文章、评论、分类、标签核心链路可手工跑通
 
 ## 技术栈
 

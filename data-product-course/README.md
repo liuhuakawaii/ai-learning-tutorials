@@ -29,6 +29,25 @@
 | 调度 | cron / GitHub Actions / APScheduler |
 | 部署 | Docker |
 
+## 贯穿项目
+
+本课程使用 `Market Insight Dashboard` 作为贯穿项目。仓库内置一个最小可运行闭环：
+
+```bash
+cd data-product-course/final-project/market-insight-demo
+npm run check
+npm run etl
+npm start
+```
+
+打开：
+
+- Dashboard：http://localhost:4180/
+- API 总览：http://localhost:4180/api/summary
+- 质量报告：http://localhost:4180/api/quality
+
+它覆盖 CSV 原始数据、清洗、质量规则、指标生成、API 查询和 Dashboard 展示。后续阶段可以逐步替换为 PostgreSQL、FastAPI、调度和部署。
+
 ## 学习路线
 
 ### 第一阶段：数据产品基础

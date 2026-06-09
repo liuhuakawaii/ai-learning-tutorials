@@ -1,4 +1,4 @@
-# 第2课：API Key、SDK 与环境变量
+﻿# 第2课：API Key、SDK 与环境变量
 
 > **课程定位**：从零配置到第一次成功的 API 请求
 > **前置知识**：第 1 课的内容、基本的终端操作
@@ -244,14 +244,14 @@ import 'dotenv/config'  // 加载 .env 文件
 import openai from '../lib/openai'
 
 async function main() {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
+  const response = await openai.responses.create({
+    model: 'gpt-5.5',
+    input: [
       { role: 'user', content: '用一句话解释什么是 API' }
     ]
   })
 
-  console.log(response.choices[0].message.content)
+  console.log(response.output_text)
 }
 
 main()
@@ -275,14 +275,14 @@ API 是软件之间通信的接口，让一个程序可以请求另一个程序�
 你的代码                        OpenAI 服务器
   │                                │
   │  1. 构造请求                    │
-  │  { model, messages }           │
+  │  { model, input }              │
   │                                │
   │  2. SDK 自动添加               │
   │  Authorization: Bearer sk-xx   │
   │  Content-Type: application/json│
   │                                │
   │  3. 发送 HTTP POST             │
-  │  POST /v1/chat/completions  ──→│
+  │  POST /v1/responses  ─────────→│
   │                                │
   │                                │  4. 验证 API Key
   │                                │  5. 检查配额
@@ -290,7 +290,7 @@ API 是软件之间通信的接口，让一个程序可以请求另一个程序�
   │                                │  7. 生成回答
   │                                │
   │  8. 接收响应                 ←──│
-  │  { choices, usage }            │
+  │  { output, output_text, usage }│
   │                                │
   │  9. SDK 解析 JSON              │
   │  10. 返回 TypeScript 对象      │
@@ -299,30 +299,23 @@ API 是软件之间通信的接口，让一个程序可以请求另一个程序�
 ### 4.3 响应的结构
 
 ```typescript
-const response = await openai.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [{ role: 'user', content: '你好' }]
+const response = await openai.responses.create({
+  model: 'gpt-5.5',
+  input: [{ role: 'user', content: '你好' }]
 })
 
 // response 的结构：
 {
-  id: 'chatcmpl-xxxx',           // 请求 ID，用于排查问题
-  object: 'chat.completion',
+  id: 'resp_xxxx',               // 请求 ID，用于排查问题
+  object: 'response',
   created: 1234567890,
-  model: 'gpt-4o-mini-2024-07-18',
-  choices: [                       // 模型生成的回答（通常 1 个）
-    {
-      index: 0,
-      message: {
-        role: 'assistant',
-        content: '你好！有什么我可以帮你的吗？'
-      },
-      finish_reason: 'stop'        // 生成结束的原因
-    }
-  ],
+  model: 'gpt-5.5',
+  status: 'completed',
+  output_text: '你好！有什么我可以帮你的吗？',
+  output: [ /* 更完整的结构化输出片段 */ ],
   usage: {                         // token 使用量
-    prompt_tokens: 10,             // 输入的 token 数
-    completion_tokens: 12,         // 输出的 token 数
+    input_tokens: 10,              // 输入的 token 数
+    output_tokens: 12,             // 输出的 token 数
     total_tokens: 22               // 总共消耗的 token 数
   }
 }
@@ -430,19 +423,19 @@ async function chat(userMessage: string) {
 
   // 2. 发送网络请求（网络延迟）
   console.time('network')
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
+  const response = await openai.responses.create({
+    model: 'gpt-5.5',
+    input: [
       { role: 'system', content: '你是一个友好的助手。' },
       { role: 'user', content: userMessage }
     ],
     temperature: 0.7,
-    max_tokens: 500,
+    max_output_tokens: 500,
   })
   console.timeEnd('network')
 
   // 3. 解析响应（本地，瞬间完成）
-  const answer = response.choices[0].message.content
+  const answer = response.output_text
   const tokens = response.usage
 
   console.log('回答:', answer)
@@ -486,9 +479,9 @@ chat('什么是 API？')
 import OpenAI from 'openai'
 
 try {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [{ role: 'user', content: '你好' }]
+  const response = await openai.responses.create({
+    model: 'gpt-5.5',
+    input: [{ role: 'user', content: '你好' }]
   })
 } catch (error) {
   if (error instanceof OpenAI.AuthenticationError) {
@@ -540,13 +533,13 @@ try {
 修改代码，打印完整的响应对象：
 
 ```typescript
-const response = await openai.chat.completions.create({...})
+const response = await openai.responses.create({...})
 console.log(JSON.stringify(response, null, 2))
 ```
 
 回答以下问题：
-1. `finish_reason` 有哪些可能的值？
-2. `prompt_tokens` 和 `completion_tokens` 分别代表什么？
+1. `status` 有哪些可能的值？
+2. `input_tokens` 和 `output_tokens` 分别代表什么？
 3. 请求的 `id` 有什么用？
 
 ### 练习三：错误处理

@@ -1,0 +1,9 @@
+services:
+  api:
+    image: ghcr.io/your-org/production-launch-kit-api:latest
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M

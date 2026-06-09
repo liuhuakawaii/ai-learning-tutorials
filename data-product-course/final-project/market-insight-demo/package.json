@@ -1,0 +1,11 @@
+{
+  "name": "market-insight-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CSV to ETL to API to dashboard demo for the data product course.",
+  "scripts": {
+    "check": "node scripts/check-demo-files.js",
+    "etl": "node scripts/run-etl.js",
+    "start": "node server.js"
+  }
+}

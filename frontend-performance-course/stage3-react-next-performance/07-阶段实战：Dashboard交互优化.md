@@ -18,7 +18,15 @@
 
 ## 一、实战页面
 
-一个典型的 SaaS Dashboard，包含以下功能：
+本阶段讲的是 React / Next 性能，但课程内置 demo 用原生 JavaScript 复现同类瓶颈，便于直接观察 DOM 数量、主线程长任务和输入延迟。默认练习页：
+
+```text
+frontend-performance-course/final-project/performance-rescue-demo/work.html
+```
+
+你要优化搜索、排序、加入购物车和大列表渲染，并在报告里说明如果迁移到 React / Next，应如何用状态下沉、memo、useMemo、虚拟滚动和 Server Components 处理。
+
+一个典型的 SaaS Dashboard，也会包含以下同类功能：
 
 ```
 ┌──────────────────────────────────────────────────────────────┐

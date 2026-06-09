@@ -1,0 +1,10 @@
+{
+  "name": "crawl-to-insight-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline crawler fixtures for the Python spider course.",
+  "scripts": {
+    "check": "node scripts/check-demo-files.js",
+    "crawl": "node scripts/crawl-fixtures.js"
+  }
+}

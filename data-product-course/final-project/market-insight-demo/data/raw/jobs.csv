@@ -1,0 +1,9 @@
+id,title,company,city,salary_min,salary_max,tags,posted_at
+1,Frontend Engineer,Northwind,Shanghai,18000,30000,react|typescript,2026-06-01
+2,Data Analyst,Contoso,Beijing,15000,26000,sql|dashboard,2026-06-02
+3,AI Product Manager,Fabrikam,Shenzhen,22000,36000,ai|product,2026-06-02
+4,Backend Engineer,Adventure Works,Hangzhou,20000,33000,node|postgres,2026-06-03
+5,Frontend Engineer,Northwind,Shanghai,18000,30000,react|typescript,2026-06-01
+6,Data Engineer,Wide World Importers,Guangzhou,24000,42000,etl|python,2026-06-04
+7,QA Engineer,Tailspin,Nanjing,,21000,test|automation,2026-06-05
+8,Product Designer,Graphic Design Institute,Chengdu,14000,24000,figma|ux,2026-06-06

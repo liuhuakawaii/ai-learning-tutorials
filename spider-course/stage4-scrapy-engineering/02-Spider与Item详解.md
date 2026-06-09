@@ -519,7 +519,7 @@ class BookspiderPipeline:
 ```python
 # settings.py（关键配置）
 BOT_NAME = "bookspider"
-ROBOTSTXT_OBEY = False
+ROBOTSTXT_OBEY = True
 CONCURRENT_REQUESTS = 4
 DOWNLOAD_DELAY = 1
 ITEM_PIPELINES = {"bookspider.pipelines.BookspiderPipeline": 300}
@@ -589,4 +589,4 @@ scrapy crawl books -o books.csv     # 输出到 CSV
 
 ## 下一课预告
 
-下一课我们将学习 **Scrapy 中间件与请求定制**——包括下载中间件、爬虫中间件的原理和用法，如何随机切换 User-Agent、使用代理 IP、处理 Cookie 和登录态，以及如何应对反爬机制。这是让你的爬虫从"能用"到"好用"的关键一步！
+下一课我们将学习 **Scrapy 中间件与请求定制**——包括下载中间件、爬虫中间件的原理和用法，如何设置请求头、配置授权代理、处理 Cookie 和登录态，以及如何在限流或拒绝访问时做合规降频与重试。这是让你的爬虫从"能用"到"可靠"的关键一步！

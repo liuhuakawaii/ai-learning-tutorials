@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Express } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -10,7 +10,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { apiLimiter } from './middleware/rateLimiter';
 import logger from './lib/logger';
 
-const app = express();
+const app: Express = express();
 
 // ============ 安全中间件 ============
 app.use(helmet()); // 设置安全 HTTP 头

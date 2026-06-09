@@ -1,0 +1,20 @@
+[
+  {
+    "id": "citation-required",
+    "query": "回答为什么必须带引用？",
+    "expectedSource": "product-brief.md",
+    "shouldRefuse": false
+  },
+  {
+    "id": "workspace-isolation",
+    "query": "知识库权限隔离的要求是什么？",
+    "expectedSource": "operations.md",
+    "shouldRefuse": false
+  },
+  {
+    "id": "unknown-topic",
+    "query": "这个系统支持股票自动交易吗？",
+    "expectedSource": null,
+    "shouldRefuse": true
+  }
+]

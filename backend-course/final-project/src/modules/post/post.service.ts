@@ -1,7 +1,8 @@
 import prisma from '../../lib/prisma';
 import { AppError } from '../../utils/errors';
-import { generateSlug, generateUniqueSlug } from '../../utils/slug';
-import { Prisma, PostStatus } from '@prisma/client';
+import { generateUniqueSlug } from '../../utils/slug';
+
+type PostStatus = 'DRAFT' | 'PUBLISHED';
 
 export class PostService {
   async list(options: {
@@ -17,29 +18,19 @@ export class PostService {
     const { page, limit, search, categoryId, tagId, status, sortBy, order } = options;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.PostWhereInput = {};
-
-    // 默认只显示已发布的文章（非管理员）
-    if (status) {
-      where.status = status;
-    } else {
-      where.status = 'PUBLISHED';
-    }
-
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { content: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-
-    if (categoryId) {
-      where.categoryId = categoryId;
-    }
-
-    if (tagId) {
-      where.tags = { some: { id: tagId } };
-    }
+    const where = {
+      ...(status ? { status } : { status: 'PUBLISHED' as const }),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: 'insensitive' as const } },
+              { content: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+      ...(categoryId ? { categoryId } : {}),
+      ...(tagId ? { tags: { some: { id: tagId } } } : {}),
+    };
 
     const [posts, total] = await Promise.all([
       prisma.post.findMany({
@@ -149,26 +140,26 @@ export class PostService {
       throw AppError.forbidden('无权修改此文章');
     }
 
-    const updateData: Prisma.PostUpdateInput = {};
-    if (data.title !== undefined) {
-      updateData.title = data.title;
-      updateData.slug = generateUniqueSlug(data.title);
-    }
-    if (data.content !== undefined) updateData.content = data.content;
-    if (data.excerpt !== undefined) updateData.excerpt = data.excerpt;
-    if (data.coverImage !== undefined) updateData.coverImage = data.coverImage;
-    if (data.categoryId !== undefined) {
-      updateData.category = data.categoryId
-        ? { connect: { id: data.categoryId } }
-        : { disconnect: true };
-    }
-    if (data.tags !== undefined) {
-      updateData.tags = { set: data.tags.map((id) => ({ id })) };
-    }
-
     return prisma.post.update({
       where: { id },
-      data: updateData,
+      data: {
+        ...(data.title !== undefined
+          ? { title: data.title, slug: generateUniqueSlug(data.title) }
+          : {}),
+        ...(data.content !== undefined ? { content: data.content } : {}),
+        ...(data.excerpt !== undefined ? { excerpt: data.excerpt } : {}),
+        ...(data.coverImage !== undefined ? { coverImage: data.coverImage } : {}),
+        ...(data.categoryId !== undefined
+          ? {
+              category: data.categoryId
+                ? { connect: { id: data.categoryId } }
+                : { disconnect: true },
+            }
+          : {}),
+        ...(data.tags !== undefined
+          ? { tags: { set: data.tags.map((tagId) => ({ id: tagId })) } }
+          : {}),
+      },
       include: {
         author: { select: { id: true, username: true, avatar: true } },
         category: { select: { id: true, name: true, slug: true } },
