@@ -10,6 +10,7 @@
 
 | 教程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
+| [ai-agent-engineer-course](./ai-agent-engineer-course/) | AI Agent 全栈工程师 | Vue 3 + FastAPI + RAG + Agent + 工作流 + MCP + 生产部署，52 课时 + 毕业项目 | 已完成 |
 | [backend-course](./backend-course/) | 全栈后端开发 | Node.js + Express + PostgreSQL + Docker，32 课时 + 完整项目 | 已完成 |
 | [spider-course](./spider-course/) | Python 爬虫 | Python + requests + Playwright + Scrapy，29 课时 + 综合项目 | 进行中 |
 | [ai-app-course](./ai-app-course/) | AI 应用开发 | 大模型 API + RAG + 工具调用 + Agent + AI 知识工作台 | 规划完成 |
