@@ -241,15 +241,13 @@ print(response.request.headers["User-Agent"])
 # python-requests/2.31.0  ← 暴露了你是 Python 脚本！
 # 有些网站看到这个直接拒绝
 
-# ✅ 伪装成浏览器
+# ✅ 设置有意义的 User-Agent，说明客户端身份
 headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "LearningScraper/1.0 (contact@example.com)",
 }
 response = requests.get("https://www.example.com", headers=headers)
 print(response.request.headers["User-Agent"])
-# Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...  ← 看起来像真人
+# LearningScraper/1.0 (contact@example.com)  ← 标明用途和联系方式
 ```
 
 ### 5.2 常用请求头设置
@@ -588,7 +586,7 @@ with requests.Session() as session:
 2. **GET 请求用 `requests.get()`**，响应对象有 `.status_code`、`.text`、`.json()` 等常用属性
 3. **查询参数用 `params` 字典**，requests 自动编码拼接，不要手动拼 URL
 4. **POST 请求有两种数据格式**：`data=` 发表单，`json=` 发 JSON，requests 自动设置 Content-Type
-5. **自定义请求头用 `headers` 参数**，User-Agent 是最基本的反反爬手段
+5. **自定义请求头用 `headers` 参数**，User-Agent 应该清楚说明客户端身份
 6. **Cookie 是保持登录状态的关键**，可以用 `cookies` 参数手动传，也可以用 Session 自动管理
 7. **Session 对象自动管理 Cookie 和 TCP 连接**，是爬虫的标准做法
 8. **`timeout` 参数必须设置**，防止程序因网络问题无限卡死

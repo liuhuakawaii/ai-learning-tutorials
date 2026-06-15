@@ -1,0 +1,16 @@
+{
+  "name": "performance-rescue-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A deliberately slow frontend performance lab for the frontend-performance-course.",
+  "scripts": {
+    "start": "http-server . -p 4173 -c-1",
+    "start:lhci": "node scripts/start-lhci-server.js",
+    "lhci": "lhci autorun",
+    "check": "node scripts/check-demo-files.js"
+  },
+  "devDependencies": {
+    "@lhci/cli": "^0.14.0",
+    "http-server": "^14.1.1"
+  }
+}

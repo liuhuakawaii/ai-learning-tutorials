@@ -28,6 +28,29 @@
 | 数据 | PostgreSQL / Redis |
 | 运维 | 日志、健康检查、备份、回滚 |
 
+## 贯穿项目
+
+本课程使用 `Production Launch Kit` 作为贯穿项目。仓库提供一个可检查的上线模板：
+
+```bash
+cd docker-cicd-course/final-project/production-launch-kit
+npm run check
+npm start
+```
+
+API：
+
+- http://localhost:4190/health
+- http://localhost:4190/version
+
+如果本机有 Docker，可以继续运行：
+
+```bash
+docker compose up --build
+```
+
+它包含最小 API、Dockerfile、Compose、CI workflow、部署、备份和回滚脚本。
+
 ## 学习路线
 
 ### 第一阶段：Docker 基础

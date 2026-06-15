@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Performance Rescue Monitor</title>
+    <link rel="stylesheet" href="./styles/optimized.css" />
+    <script src="./src/vitals.js" defer></script>
+  </head>
+  <body data-page="monitor">
+    <main class="monitor">
+      <p class="eyebrow">Local RUM monitor</p>
+      <h1>Web Vitals Buffer</h1>
+      <p>Open `slow.html` and `optimized.html`, interact with them, then return here to inspect locally stored metrics.</p>
+      <button id="refreshMetrics">Refresh metrics</button>
+      <button id="clearMetrics">Clear</button>
+      <pre id="metricsOutput">[]</pre>
+    </main>
+    <script>
+      const output = document.querySelector('#metricsOutput');
+      function render() {
+        output.textContent = JSON.stringify(JSON.parse(localStorage.getItem('perf-rescue-vitals') || '[]'), null, 2);
+      }
+      document.querySelector('#refreshMetrics').addEventListener('click', render);
+      document.querySelector('#clearMetrics').addEventListener('click', () => {
+        localStorage.removeItem('perf-rescue-vitals');
+        render();
+      });
+      render();
+    </script>
+  </body>
+</html>

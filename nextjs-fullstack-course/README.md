@@ -29,6 +29,17 @@
 | 支付 | Stripe 思路 |
 | 部署 | Vercel / Docker |
 
+## 贯穿项目
+
+本课程使用 `Micro SaaS Starter` 作为贯穿项目。仓库提供一个 scaffold，用于统一路由结构、Prisma 模型、权限矩阵和阶段验收：
+
+```bash
+cd nextjs-fullstack-course/final-project/micro-saas-starter-scaffold
+npm run check
+```
+
+这个 scaffold 不是完整安装版 SaaS，而是课程的“骨架锚点”。你会在五个阶段逐步把它扩成可运行产品。
+
 ## 学习路线
 
 ### 第一阶段：App Router 基础

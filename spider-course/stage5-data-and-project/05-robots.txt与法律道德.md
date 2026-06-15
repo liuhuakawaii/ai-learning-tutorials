@@ -563,7 +563,7 @@ import requests
 # ❌ 错误：不设置 UA 或使用默认的 Python-requests/xxx
 headers_bad = {
     "User-Agent": "python-requests/2.28.0"
-    # 网站一看就知道是爬虫，容易被封
+    # 来源和联系方式不清晰，不利于对方识别和沟通
 }
 
 # ❌ 错误：伪装成 Chrome 浏览器

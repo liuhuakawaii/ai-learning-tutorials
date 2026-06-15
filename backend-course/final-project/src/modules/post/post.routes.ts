@@ -1,10 +1,10 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 import { postController } from './post.controller';
 import { authMiddleware, optionalAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { createPostSchema, updatePostSchema, postListSchema, postSlugSchema, postIdSchema } from './post.schema';
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // 公开路由
 router.get('/', validate(postListSchema), postController.list);

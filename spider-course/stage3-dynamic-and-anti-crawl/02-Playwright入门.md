@@ -159,8 +159,8 @@ python -c "from playwright.sync_api import sync_playwright; print('安装成功�
 │             │  推荐作为默认选择                               │
 ├──────────────┼──────────────────────────────────────────────┤
 │  Firefox     │  Mozilla 的浏览器                              │
-│             │  有些网站在 Firefox 下检测更宽松                │
-│             │  适合需要绕过某些检测的场景                     │
+│             │  适合做跨浏览器兼容性验证                       │
+│             │  可用于排查不同渲染引擎下的页面差异             │
 ├──────────────┼──────────────────────────────────────────────┤
 │  WebKit      │  Apple Safari 的内核                           │
 │             │  可以模拟 Safari 浏览器环境                     │
@@ -168,7 +168,7 @@ python -c "from playwright.sync_api import sync_playwright; print('安装成功�
 └──────────────┴──────────────────────────────────────────────┘
 
   绝大多数情况下，用 Chromium 就够了。
-  如果遇到反爬检测，可以试试 Firefox 或 WebKit。
+  如果页面在不同浏览器中表现不一致，可以用 Firefox 或 WebKit 做兼容性排查。
 ```
 
 ---

@@ -1,4 +1,4 @@
-# 第2课：工具 Schema——输入、输出、错误协议
+﻿# 第2课：工具 Schema——输入、输出、错误协议
 
 > **课程定位**：设计可靠的工具接口
 > **前置知识**：第 1 课的工具调用原理
@@ -363,47 +363,46 @@ import { toolRegistry } from './tool-registry'
 const openai = new OpenAI()
 
 export async function chatWithTools(
-  messages: OpenAI.ChatCompletionMessageParam[]
+  input: ResponseInputMessage[]
 ): Promise<string> {
   // 获取工具 schema
   const tools = toolRegistry.getToolSchemas()
 
   // 第一步：发送给模型
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages,
+  const response = await openai.responses.create({
+    model: 'gpt-5.5',
+    input,
     tools,
     tool_choice: 'auto',
   })
 
-  const message = response.choices[0].message
+  const toolCalls = response.output.filter((item) => item.type === 'function_call')
 
   // 如果模型要求调用工具
-  if (message.tool_calls) {
-    messages.push(message)
-
+  if (toolCalls.length > 0) {
+    const toolResults = []
     // 执行所有工具调用
-    for (const toolCall of message.tool_calls) {
-      const args = JSON.parse(toolCall.function.arguments)
-      const result = await toolRegistry.execute(toolCall.function.name, args)
+    for (const toolCall of toolCalls) {
+      const args = JSON.parse(toolCall.arguments)
+      const result = await toolRegistry.execute(toolCall.name, args)
 
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        content: JSON.stringify(result),
+      toolResults.push({
+        type: 'function_call_output' as const,
+        call_id: toolCall.call_id,
+        output: JSON.stringify(result),
       })
     }
 
     // 第二步：把工具结果发回模型
-    const finalResponse = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
+    const finalResponse = await openai.responses.create({
+      model: 'gpt-5.5',
+      input: [...input, ...response.output, ...toolResults],
     })
 
-    return finalResponse.choices[0].message.content || ''
+    return finalResponse.output_text || ''
   }
 
-  return message.content || ''
+  return response.output_text || ''
 }
 ```
 

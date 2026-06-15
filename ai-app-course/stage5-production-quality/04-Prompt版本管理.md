@@ -1,4 +1,4 @@
-# 第4课：Prompt 版本管理——变更记录、回滚、灰度
+﻿# 第4课：Prompt 版本管理——变更记录、回滚、灰度
 
 > **课程定位**：像管理代码一样管理 Prompt
 > **前置知识**：第 2-3 课的评估
@@ -291,7 +291,7 @@ export const trafficRouter = new TrafficRouter()
 // lib/chat.ts
 export async function chat(
   userId: string,
-  messages: any[]
+  input: any[]
 ) {
   // 获取应该使用的 Prompt 版本
   const version = await trafficRouter.getVersion('chat-system', userId)
@@ -307,9 +307,9 @@ export async function chat(
   }
 
   // 使用对应的 Prompt 调用模型
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
+  const response = await openai.responses.create({
+    model: 'gpt-5.5',
+    input: [
       { role: 'system', content: systemPrompt },
       ...messages,
     ],

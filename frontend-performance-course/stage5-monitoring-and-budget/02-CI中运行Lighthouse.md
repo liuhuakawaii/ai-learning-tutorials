@@ -56,11 +56,15 @@ module.exports = {
   ci: {
     collect: {
       // 要测试的 URL
-      url: ['http://localhost:3000/', 'http://localhost:3000/about'],
+      url: [
+        'http://localhost:4173/slow.html',
+        'http://localhost:4173/work.html',
+        'http://localhost:4173/optimized.html',
+      ],
       // 启动服务器的命令
-      startServerCommand: 'npm run start',
+      startServerCommand: 'pnpm start:lhci',
       // 等待服务器启动的时间
-      startServerReadyPattern: 'Listening on port',
+      startServerReadyPattern: 'Available on',
       // 测试次数（取中位数）
       numberOfRuns: 3,
       // Chrome 启动参数
@@ -71,18 +75,18 @@ module.exports = {
     assert: {
       // 断言规则
       assertions: {
-        // 性能分数 ≥ 90
-        'categories:performance': ['error', { minScore: 0.9 }],
+        // 学习阶段建议先用 warn，真实项目稳定后再提升为 error
+        'categories:performance': ['warn', { minScore: 0.8 }],
         // 可访问性分数 ≥ 90
-        'categories:accessibility': ['error', { minScore: 0.9 }],
+        'categories:accessibility': ['warn', { minScore: 0.9 }],
         // LCP ≤ 2.5s
-        'largest-contentful-paint': ['error', { maxNumericValue: 2500 }],
+        'largest-contentful-paint': ['warn', { maxNumericValue: 2500 }],
         // CLS ≤ 0.1
-        'cumulative-layout-shift': ['error', { maxNumericValue: 0.1 }],
+        'cumulative-layout-shift': ['warn', { maxNumericValue: 0.1 }],
         // TBT ≤ 200ms
-        'total-blocking-time': ['error', { maxNumericValue: 200 }],
+        'total-blocking-time': ['warn', { maxNumericValue: 200 }],
         // FCP ≤ 1.8s
-        'first-contentful-paint': ['error', { maxNumericValue: 1800 }],
+        'first-contentful-paint': ['warn', { maxNumericValue: 1800 }],
       },
     },
     upload: {
@@ -114,16 +118,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
-      - name: Build
-        run: npm run build
+      - name: Install dependencies
+        working-directory: frontend-performance-course/final-project/performance-rescue-demo
+        run: pnpm install --frozen-lockfile
 
       - name: Run Lighthouse CI
-        run: |
-          npm install -g @lhci/cli
-          lhci autorun
+        working-directory: frontend-performance-course/final-project/performance-rescue-demo
+        run: pnpm lhci
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
 
@@ -131,7 +137,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lighthouse-report
-          path: .lighthouseci/*.html
+          path: frontend-performance-course/final-project/performance-rescue-demo/reports/lhci
 ```
 
 ### 2.4 GitLab CI 集成
@@ -142,13 +148,13 @@ lighthouse:
   stage: test
   image: cypress/browsers:node-20.9.0-chrome-118.0.5993.88-1-ff-118.0.2-edge-118.0.2088.46-1
   script:
-    - npm ci
-    - npm run build
-    - npm install -g @lhci/cli
-    - lhci autorun
+    - corepack enable
+    - cd frontend-performance-course/final-project/performance-rescue-demo
+    - pnpm install --frozen-lockfile
+    - pnpm lhci
   artifacts:
     paths:
-      - .lighthouseci/
+      - frontend-performance-course/final-project/performance-rescue-demo/reports/lhci
     expire_in: 7 days
 ```
 
@@ -181,8 +187,8 @@ assertions: {
   // LCP ≤ 2.5s
   'largest-contentful-paint': ['error', { maxNumericValue: 2500 }],
 
-  // FID ≤ 100ms
-  'max-potential-fid': ['error', { maxNumericValue: 100 }],
+  // Lighthouse Lab 中主要用 TBT 作为交互风险代理；真实用户侧用 INP 采集
+  'total-blocking-time': ['error', { maxNumericValue: 200 }],
 
   // CLS ≤ 0.1
   'cumulative-layout-shift': ['error', { maxNumericValue: 0.1 }],
@@ -242,17 +248,16 @@ module.exports = {
   ci: {
     collect: {
       url: [
-        'http://localhost:3000/',
-        'http://localhost:3000/about',
-        'http://localhost:3000/products',
-        'http://localhost:3000/blog',
+        'http://localhost:4173/slow.html',
+        'http://localhost:4173/work.html',
+        'http://localhost:4173/optimized.html',
       ],
       // 为不同页面设置不同断言
     },
     assert: {
       matrix: [
         {
-          matchingUrlPattern: 'http://localhost:3000/$',
+          matchingUrlPattern: 'http://localhost:4173/optimized.html',
           assertions: {
             'categories:performance': ['error', { minScore: 0.95 }],
           },
@@ -325,7 +330,7 @@ module.exports = {
 - name: Lighthouse Report
   uses: foo-software/lighthouse-check-action@v11
   with:
-    urls: 'http://localhost:3000'
+    urls: 'http://localhost:4173/optimized.html'
     accessToken: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
 ```
 

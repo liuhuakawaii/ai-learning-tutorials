@@ -152,7 +152,7 @@ Pipeline 负责处理 Spider 提取出来的数据——清洗、验证、存储
 **中间件（Middleware）—— 安检通道**
 
 中间件可以在请求发出前和响应返回后插入自定义逻辑，比如：
-- 添加 User-Agent、代理 IP
+- 添加清晰的 User-Agent、配置授权代理
 - 处理 Cookie
 - 处理重定向
 - 过滤异常响应
@@ -394,11 +394,11 @@ scrapy shell "http://quotes.toscrape.com/"
 BOT_NAME = "myspider"
 
 # 是否遵守 robots.txt 协议
-# ❌ 初学者常见错误：设成 True 导致很多网站爬不了
-ROBOTSTXT_OBEY = False          # 生产环境建议根据需求设置
+# ✅ 默认开启：真实目标站点应先尊重 robots.txt 和服务条款
+ROBOTSTXT_OBEY = True
 
 # 并发请求数（同时派出几个"快递员"）
-CONCURRENT_REQUESTS = 16        # 默认 16，别开太大以免被封
+CONCURRENT_REQUESTS = 16        # 默认 16，真实站点应按承载能力调低
 
 # 下载延迟（每个请求之间等多久，单位：秒）
 DOWNLOAD_DELAY = 1              # 礼貌爬虫，每秒最多请求 1 次
@@ -409,7 +409,7 @@ DOWNLOAD_DELAY = 1              # 礼貌爬虫，每秒最多请求 1 次
 DEFAULT_REQUEST_HEADERS = {
     "Accept": "text/html,application/xhtml+xml",
     "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",
+    "User-Agent": "MyLearningSpider/1.0 (contact@example.com)",
 }
 
 # ============== 管道配置 ==============

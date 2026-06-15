@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Market Insight Dashboard</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #17202a;
+        background: #f6f8fb;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: end;
+      }
+      h1 {
+        margin: 0;
+        font-size: 32px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin: 24px 0;
+      }
+      .card,
+      table {
+        background: white;
+        border: 1px solid #d9e2ec;
+        border-radius: 8px;
+      }
+      .card {
+        padding: 18px;
+      }
+      .card strong {
+        display: block;
+        font-size: 28px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+      }
+      th,
+      td {
+        padding: 12px;
+        border-bottom: 1px solid #edf2f7;
+        text-align: left;
+      }
+      @media (max-width: 760px) {
+        header,
+        .grid {
+          grid-template-columns: 1fr;
+          display: grid;
+          align-items: stretch;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p>Market Insight Demo</p>
+          <h1>招聘市场数据看板</h1>
+        </div>
+        <button id="refresh">刷新数据</button>
+      </header>
+      <section class="grid" id="summary"></section>
+      <section>
+        <h2>城市薪资</h2>
+        <table>
+          <thead>
+            <tr><th>城市</th><th>岗位数</th><th>平均薪资</th></tr>
+          </thead>
+          <tbody id="cityRows"></tbody>
+        </table>
+      </section>
+      <section>
+        <h2>岗位明细</h2>
+        <table>
+          <thead>
+            <tr><th>岗位</th><th>公司</th><th>城市</th><th>平均薪资</th><th>标签</th></tr>
+          </thead>
+          <tbody id="jobRows"></tbody>
+        </table>
+      </section>
+    </main>
+    <script>
+      async function load() {
+        const [summary, byCity, jobs] = await Promise.all([
+          fetch('/api/summary').then((res) => res.json()),
+          fetch('/api/metrics/by-city').then((res) => res.json()),
+          fetch('/api/jobs').then((res) => res.json())
+        ]);
+
+        document.querySelector('#summary').innerHTML = [
+          ['原始数据', summary.raw_count],
+          ['清洗后', summary.clean_count],
+          ['异常数据', summary.rejected_count],
+          ['平均薪资', summary.salary_avg]
+        ].map(([label, value]) => `<article class="card"><span>${label}</span><strong>${value}</strong></article>`).join('');
+
+        document.querySelector('#cityRows').innerHTML = byCity
+          .map((row) => `<tr><td>${row.city}</td><td>${row.count}</td><td>${row.salary_avg}</td></tr>`)
+          .join('');
+
+        document.querySelector('#jobRows').innerHTML = jobs
+          .map((job) => `<tr><td>${job.title}</td><td>${job.company}</td><td>${job.city}</td><td>${job.salary_avg}</td><td>${job.tags.join(', ')}</td></tr>`)
+          .join('');
+      }
+
+      document.querySelector('#refresh').addEventListener('click', load);
+      load();
+    </script>
+  </body>
+</html>

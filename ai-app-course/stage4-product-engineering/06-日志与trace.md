@@ -1,4 +1,4 @@
-# 第6课：日志与 trace——请求、检索、工具、输出
+﻿# 第6课：日志与 trace——请求、检索、工具、输出
 
 > **课程定位**：实现可观测性
 > **前置知识**：阶段一到三的基础
@@ -261,7 +261,7 @@ export async function chatWithTrace(
   message: string
 ) {
   const tracer = new Tracer(userId, conversationId)
-  await tracer.start('gpt-4o-mini')
+  await tracer.start('gpt-5.5')
 
   try {
     // 1. 检索阶段
@@ -277,25 +277,25 @@ export async function chatWithTrace(
     // 3. 模型调用阶段
     await tracer.startStage('model_call', { messages })
     const startTime = Date.now()
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
+    const response = await openai.responses.create({
+      model: 'gpt-5.5',
+      input: messages,
     })
     const duration = Date.now() - startTime
-    await tracer.endStage('model_call', { response: response.choices[0] })
+    await tracer.endStage('model_call', { response: response.output[0] })
 
     // 4. 后处理阶段
     await tracer.startStage('post_processing')
-    const answer = response.choices[0].message.content
+    const answer = response.output_text
     await tracer.endStage('post_processing', { answer })
 
     // 记录完成
     const tokenUsage = {
-      prompt: response.usage?.prompt_tokens || 0,
-      completion: response.usage?.completion_tokens || 0,
+      prompt: response.usage?.input_tokens || 0,
+      completion: response.usage?.output_tokens || 0,
       total: response.usage?.total_tokens || 0,
     }
-    const cost = calculateCost('gpt-4o-mini', tokenUsage.prompt, tokenUsage.completion)
+    const cost = calculateCost('gpt-5.5', tokenUsage.prompt, tokenUsage.completion)
 
     await tracer.end('success', tokenUsage, cost)
 

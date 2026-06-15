@@ -679,6 +679,6 @@ class PriceCleanPipeline:
 
 ## 下一课预告
 
-数据处理搞定了，但你有没有想过：Scrapy 是怎么管理 HTTP 请求的？为什么有时候请求失败了会自动重试？怎么给请求设置代理和随机 User-Agent？
+数据处理搞定了，但你有没有想过：Scrapy 是怎么管理 HTTP 请求的？为什么有时候请求失败了会自动重试？怎么设置清晰的 User-Agent 和授权代理？
 
-下一课《中间件与去重》将带你深入 Scrapy 的请求处理机制，学习 Spider Middleware 和 Downloader Middleware 两大中间件系统，以及 Scrapy 内置的请求去重原理。这些是让你的爬虫更健壮、更不容易被反爬的关键技能。
+下一课《中间件与去重》将带你深入 Scrapy 的请求处理机制，学习 Spider Middleware 和 Downloader Middleware 两大中间件系统，以及 Scrapy 内置的请求去重原理。这些是让你的爬虫更健壮、更可维护的关键技能。

@@ -1,10 +1,10 @@
-import { Router } from 'express';
+import { Router, type Router as ExpressRouter } from 'express';
 import { commentController } from './comment.controller';
 import { authMiddleware } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { createCommentSchema, updateCommentSchema, commentIdSchema, commentListSchema } from './comment.schema';
 
-const router = Router({ mergeParams: true });
+const router: ExpressRouter = Router({ mergeParams: true });
 
 // 获取文章评论（公开）
 router.get('/', validate(commentListSchema), commentController.listByPost);

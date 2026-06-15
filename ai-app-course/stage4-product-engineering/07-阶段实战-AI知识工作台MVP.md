@@ -1,4 +1,4 @@
-# 第7课：阶段实战——AI 知识工作台 MVP
+﻿# 第7课：阶段实战——AI 知识工作台 MVP
 
 > **课程定位**：综合运用阶段四所学，构建完整产品
 > **前置知识**：第 1-6 课的全部内容
@@ -87,7 +87,7 @@ model Conversation {
   id            String    @id @default(cuid())
   userId        String
   title         String
-  model         String    @default("gpt-4o-mini")
+  model         String    @default("gpt-5.5")
   systemPrompt  String?
   isArchived    Boolean   @default(false)
   isPinned      Boolean   @default(false)

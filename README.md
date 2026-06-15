@@ -4,7 +4,7 @@
 
 ## 简介
 
-这个仓库存放了我利用 AI 生成的各类技术学习教程。当前课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集与工程化项目能力。每份教程都包含完整的知识体系、可运行的代码示例和动手练习。
+这个仓库存放了我利用 AI 生成的各类技术学习教程。当前课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库不再只保留 Markdown 讲义，也为重点课程补了贯穿式 final project / project kit，方便边学边验证。
 
 ## 教程列表
 
@@ -23,8 +23,9 @@
 
 - **前端友好**：默认你已有 HTML/CSS/JavaScript 基础，从后端和爬虫的第一性原理讲起
 - **体系完整**：清晰的学习路线和阶段划分
-- **代码可运行**：所有示例都是完整代码，不是片段
-- **实战驱动**：每阶段有练习，最终产出实际项目
+- **讲义配套代码**：课程中的代码用于配合讲解和练习；可运行或可检查项目见各课程的 `final-project`
+- **实战驱动**：每阶段有练习、报告或验收清单，最终产出实际项目
+- **可验证**：新增 project kit 都提供 `check` 脚本，部分课程还提供本地服务、ETL、LHCI 或 eval
 
 ## 使用方式
 
@@ -33,4 +34,16 @@ git clone <repo-url>
 cd ai-learning-tutorials
 cd backend-course
 # 按 README.md 中的学习路线开始
+```
+
+也可以直接进入某门课的 final project：
+
+```bash
+cd frontend-performance-course/final-project/performance-rescue-demo
+pnpm check
+
+cd ai-app-course/final-project/ai-knowledge-workspace-kit
+npm run check
+npm run ingest
+npm run eval
 ```

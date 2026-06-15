@@ -1,0 +1,9 @@
+{
+  "name": "micro-saas-starter-scaffold",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Scaffold and acceptance checklist for the Next.js fullstack course.",
+  "scripts": {
+    "check": "node scripts/check-scaffold.js"
+  }
+}

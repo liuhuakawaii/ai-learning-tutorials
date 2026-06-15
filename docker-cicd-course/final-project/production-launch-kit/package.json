@@ -1,0 +1,10 @@
+{
+  "name": "production-launch-kit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Docker, Compose, and CI/CD project kit for the deployment course.",
+  "scripts": {
+    "check": "node scripts/check-kit.js",
+    "start": "node api/server.js"
+  }
+}

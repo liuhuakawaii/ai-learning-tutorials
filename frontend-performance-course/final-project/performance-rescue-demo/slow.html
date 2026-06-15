@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Performance Rescue - Slow Page</title>
+    <link rel="stylesheet" href="./styles/slow.css" />
+    <script src="./third-party/analytics.js"></script>
+    <script src="./src/vitals.js" defer></script>
+    <script src="./src/slow.js" defer></script>
+  </head>
+  <body data-page="slow">
+    <header class="topbar">
+      <div class="brand">Rescue Shop</div>
+      <label class="search">
+        <span>Search</span>
+        <input id="searchInput" type="search" placeholder="Search 2,000 products" />
+      </label>
+      <button id="sortButton">Sort by score</button>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Slow baseline</p>
+          <h1>Performance Rescue Lab</h1>
+          <p>Use this page to practice LCP, CLS, INP, resource, and monitoring diagnosis.</p>
+          <button id="addButton">Add bundle to cart</button>
+        </div>
+      </section>
+
+      <section id="promoMount"></section>
+
+      <section class="metrics-row">
+        <article><strong>4.2s</strong><span>Target LCP baseline</span></article>
+        <article><strong>0.35</strong><span>Target CLS baseline</span></article>
+        <article><strong>350ms+</strong><span>Target interaction delay</span></article>
+      </section>
+
+      <section class="catalog">
+        <div class="section-heading">
+          <h2>Product Catalog</h2>
+          <p id="resultCount">Rendering all products...</p>
+        </div>
+        <div id="productList" class="product-list"></div>
+      </section>
+    </main>
+
+    <template id="productTemplate">
+      <article class="product-card">
+        <div class="product-image"></div>
+        <h3></h3>
+        <p></p>
+        <button>View details</button>
+      </article>
+    </template>
+  </body>
+</html>

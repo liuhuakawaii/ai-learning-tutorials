@@ -1,4 +1,4 @@
-# 第5课：结构化输出——JSON Schema、类型校验、Zod 对接
+﻿# 第5课：结构化输出——JSON Schema、类型校验、Zod 对接
 
 > **课程定位**：让模型输出可靠、可解析的数据
 > **前置知识**：第 3 课的文本生成基础、基本的 TypeScript 类型
@@ -93,21 +93,21 @@ import OpenAI from 'openai'
 
 const openai = new OpenAI()
 
-// 方式一：response_format 参数
-const response = await openai.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [
+// 方式一：text.format 参数
+const response = await openai.responses.create({
+  model: 'gpt-5.5',
+  input: [
     {
       role: 'system',
       content: '分析用户评论的情感，返回 JSON 格式。'
     },
     { role: 'user', content: '这个产品太棒了！' }
   ],
-  response_format: { type: 'json_object' },
+  text: { format: { type: 'json_object' } },
 })
 
 // 输出一定是合法的 JSON
-const result = JSON.parse(response.choices[0].message.content!)
+const result = JSON.parse(response.output_text)
 console.log(result)
 // { "sentiment": "positive", "confidence": 0.95 }
 ```
@@ -141,7 +141,7 @@ OpenAI 提供了更严格的结构化输出方式：
 
 ```typescript
 import OpenAI from 'openai'
-import { zodResponseFormat } from 'openai/helpers/zod'
+import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 
 const openai = new OpenAI()
@@ -153,19 +153,17 @@ const SentimentSchema = z.object({
   keywords: z.array(z.string()),
 })
 
-// 使用 zodResponseFormat
-const response = await openai.chat.completions.create({
-  model: 'gpt-4o-mini',
-  messages: [
+// 使用 responses.parse + zodTextFormat
+const response = await openai.responses.parse({
+  model: 'gpt-5.5',
+  input: [
     { role: 'user', content: '分析情感：这个产品太棒了！' }
   ],
-  response_format: zodResponseFormat(SentimentSchema, 'sentiment'),
+  text: { format: zodTextFormat(SentimentSchema, 'sentiment') },
 })
 
 // 输出保证符合 schema
-const result = SentimentSchema.parse(
-  JSON.parse(response.choices[0].message.content!)
-)
+const result = response.output_parsed
 console.log(result)
 // { sentiment: 'positive', confidence: 0.95, keywords: ['棒'] }
 ```
@@ -182,7 +180,7 @@ console.log(result)
 │    → 模型通常会遵守，但不保证                                     │
 │                                                                 │
 │  第 2 层：JSON Mode（格式约束）                                  │
-│    response_format: { type: 'json_object' }                     │
+│    text: { format: { type: 'json_object' } }                    │
 │    → 保证是合法 JSON，但不保证结构                                │
 │                                                                 │
 │  第 3 层：Schema 校验（类型约束）                                 │
@@ -321,7 +319,7 @@ export type CommentAnalysis = z.infer<typeof CommentAnalysisSchema>
 ```typescript
 // src/lib/structured-output.ts
 import OpenAI from 'openai'
-import { zodResponseFormat } from 'openai/helpers/zod'
+import { zodTextFormat } from 'openai/helpers/zod'
 import { z } from 'zod'
 
 const openai = new OpenAI()
@@ -338,30 +336,26 @@ export async function structuredOutput<T extends z.ZodType>(
   systemPrompt?: string
 ): Promise<StructuredOutputResult<z.infer<T>>> {
   try {
-    const messages: OpenAI.ChatCompletionMessageParam[] = []
+    const input: Array<{ role: 'system' | 'user'; content: string }> = []
 
     if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt })
+      input.push({ role: 'system', content: systemPrompt })
     }
-    messages.push({ role: 'user', content: prompt })
+    input.push({ role: 'user', content: prompt })
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
-      response_format: zodResponseFormat(schema, 'output'),
+    const response = await openai.responses.parse({
+      model: 'gpt-5.5',
+      input,
+      text: { format: zodTextFormat(schema, 'output') },
     })
 
-    const content = response.choices[0].message.content
+    const content = response.output_parsed
 
     if (!content) {
       return { success: false, error: '模型返回空内容' }
     }
 
-    // 解析并校验
-    const parsed = JSON.parse(content)
-    const validated = schema.parse(parsed)
-
-    return { success: true, data: validated }
+    return { success: true, data: content }
 
   } catch (error) {
     if (error instanceof z.ZodError) {
