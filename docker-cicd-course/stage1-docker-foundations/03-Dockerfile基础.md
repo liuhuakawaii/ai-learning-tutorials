@@ -1,8 +1,8 @@
 # 第三课：Dockerfile 基础
 
-> **课程定位**：学会用 Dockerfile 描述应用的运行环境，这是容器化的核心技能
-> **前置知识**：理解镜像、容器、分层存储的概念（第二课）
-> **预计时长**：45 分钟
+> **课程定位**：学会用 Dockerfile 描述应用的运行环境，包括构建上下文和 .dockerignore
+> **前置知识**：理解镜像、容器的概念（第二课）
+> **预计时长**：50 分钟
 
 ---
 
@@ -12,9 +12,8 @@
 
 1. 理解 Dockerfile 的工作原理
 2. 掌握常用指令：FROM、RUN、COPY、WORKDIR、EXPOSE、CMD
-3. 为 Node.js 项目编写可用的 Dockerfile
-4. 理解构建上下文（Build Context）的概念
-5. 掌握 docker build 命令的使用
+3. 理解构建上下文和 .dockerignore 的作用
+4. 掌握构建缓存优化策略
 
 ---
 
@@ -71,20 +70,6 @@ CMD ["node", "src/index.js"]
 
 每个 Dockerfile 的第一行必须是 `FROM`，它指定了构建的基础镜像。
 
-```dockerfile
-# 官方镜像
-FROM node:18-alpine
-FROM python:3.11-slim
-FROM nginx:1.25
-FROM postgres:14
-
-# 特定版本
-FROM node:18.17.0-alpine
-
-# 使用最小镜像（高级）
-FROM alpine:3.18
-```
-
 ```
 选择基础镜像的原则：
 
@@ -106,20 +91,6 @@ FROM alpine:3.18
 
 `RUN` 指令在构建时执行命令，结果会保存为新的一层。
 
-```dockerfile
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-    curl \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# 安装 Node.js 依赖
-RUN npm install
-
-# 运行构建命令
-RUN npm run build
-```
-
 ```
 RUN 的两种形式：
 
@@ -130,10 +101,6 @@ RUN 的两种形式：
   Exec 形式（推荐用于避免 shell 问题）：
     RUN ["npm", "install"]
     # 直接执行，不经过 shell
-
-  实际区别：
-    Shell 形式可以使用环境变量和管道
-    Exec 形式在某些基础镜像中更可靠
 ```
 
 **最佳实践：合并 RUN 指令减少层数**
@@ -162,9 +129,6 @@ COPY package.json /app/
 # 复制整个目录
 COPY src/ /app/src/
 
-# 复制并重命名
-COPY config.prod.json /app/config.json
-
 # 使用通配符
 COPY package*.json /app/
 
@@ -176,11 +140,7 @@ COPY package.json package-lock.json /app/
 COPY vs ADD：
 
   COPY：纯粹的文件复制（推荐）
-    COPY src/ /app/src/
-
   ADD：复制 + 自动解压 + 支持 URL（不推荐）
-    ADD archive.tar.gz /app/    ← 自动解压
-    ADD https://example.com/file /app/  ← 下载文件
 
   建议：除非需要自动解压，否则始终用 COPY
   原因：ADD 的行为不直观，容易出错
@@ -217,10 +177,6 @@ EXPOSE 3000
 
 # 声明多个端口
 EXPOSE 3000 3001
-
-# 指定协议
-EXPOSE 3000/tcp
-EXPOSE 53/udp
 ```
 
 ```
@@ -245,9 +201,6 @@ CMD ["node", "src/index.js"]
 
 # Shell 形式
 CMD node src/index.js
-
-# 作为 ENTRYPOINT 的参数
-CMD ["--port", "3000"]
 ```
 
 ```
@@ -282,9 +235,8 @@ ENV PORT=3000
 # 在后续指令中使用
 RUN echo $NODE_ENV
 
-# 容器运行时也有效
+# 容器运行时也有效（应用可通过 process.env 获取）
 CMD ["node", "src/index.js"]
-# 应用可以通过 process.env.NODE_ENV 获取
 ```
 
 ### 2.8 ARG —— 构建参数
@@ -292,18 +244,14 @@ CMD ["node", "src/index.js"]
 ```dockerfile
 # 定义构建时的变量
 ARG NODE_VERSION=18
-ARG APP_ENV=production
 
 # 在 FROM 中使用
 FROM node:${NODE_VERSION}-alpine
-
-# 在 RUN 中使用
-RUN echo "Building for $APP_ENV"
 ```
 
 ```bash
 # 构建时传入参数
-docker build --build-arg NODE_VERSION=20 --build-arg APP_ENV=staging .
+docker build --build-arg NODE_VERSION=20 .
 ```
 
 ```
@@ -319,7 +267,7 @@ ARG vs ENV：
 
 ---
 
-## 三、构建上下文（Build Context）
+## 三、构建上下文与 .dockerignore
 
 ### 3.1 什么是构建上下文
 
@@ -327,8 +275,8 @@ ARG vs ENV：
 docker build 命令：
 
   docker build -t my-app .
-                    ↑
-                    这个 "." 就是构建上下文
+                      ↑
+                      这个 "." 就是构建上下文
 
   构建上下文 = docker build 时发送给 Docker 引擎的文件集合
 
@@ -340,8 +288,6 @@ docker build 命令：
   │  ├── package.json          ← 会被发送    │
   │  ├── package-lock.json     ← 会被发送    │
   │  ├── src/                  ← 会被发送    │
-  │  │   ├── index.js                       │
-  │  │   └── utils.js                       │
   │  ├── node_modules          ← 不需要发送  │
   │  └── .git                   ← 不需要发送  │
   └─────────────────────────────────────────┘
@@ -355,16 +301,122 @@ docker build 命令：
   如果你的项目有 500MB（包括 node_modules、.git 等），
   每次 docker build 都要发送 500MB 给 Docker 引擎。
 
-  构建慢 → 因为每次都要发送大量文件
-  浪费空间 → 不需要的文件也被发送了
+  没有 .dockerignore：
+    每次 docker build 发送 300MB → 构建慢
+    node_modules 进入镜像        → 镜像大
+    .env 进入镜像               → 安全风险
 
-解决：
-
-  1. 使用 .dockerignore 排除不需要的文件
-  2. 只复制真正需要的文件到镜像
+  有 .dockerignore：
+    每次 docker build 发送 5MB   → 构建快 60 倍
+    只复制需要的文件             → 镜像小
+    敏感文件被排除               → 安全
 ```
 
-### 3.3 构建命令详解
+### 3.3 .dockerignore 语法
+
+```
+.dockerignore 的语法和 .gitignore 类似：
+
+  # 注释
+  node_modules          ← 排除 node_modules 目录
+  *.log                 ← 排除所有 .log 文件
+  .git                  ← 排除 .git 目录
+  !package-lock.json    ← 例外：不排除
+
+  规则详解：
+  ┌──────────────────┬────────────────────────────────┐
+  │  模式             │  含义                          │
+  ├──────────────────┼────────────────────────────────┤
+  │  node_modules    │  排除 node_modules 目录         │
+  │  *.log           │  排除所有 .log 结尾的文件        │
+  │  **/*.log        │  排除任意深度的 .log 文件        │
+  │  .env*           │  排除所有 .env 开头的文件        │
+  │  !important.log  │  例外规则：不排除               │
+  └──────────────────┴────────────────────────────────┘
+```
+
+### 3.4 Node.js 项目的 .dockerignore 模板
+
+```dockerignore
+# ---- 依赖和缓存 ----
+node_modules
+npm-debug.log*
+.npm
+
+# ---- 构建产物 ----
+dist
+build
+.next
+coverage
+
+# ---- 版本控制 ----
+.git
+.gitignore
+
+# ---- IDE ----
+.vscode
+.idea
+
+# ---- 环境变量（安全！）----
+.env
+.env.local
+.env.*.local
+
+# ---- Docker 相关 ----
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# ---- 测试 ----
+*.test.js
+*.test.ts
+__tests__
+```
+
+### 3.5 安全考量：敏感文件泄露
+
+```
+危险：敏感文件进入镜像
+
+  如果 .env 包含数据库密码、API 密钥：
+    DATABASE_URL=postgres://user:password@host/db
+    API_KEY=sk-1234567890
+
+  如果没有 .dockerignore 排除 .env：
+    docker build → .env 进入镜像 → 推送到仓库 → 任何人可以查看
+
+  即使后来删除了 .env：
+    镜像的分层存储中仍然保留着旧层
+    可以通过 docker history 看到
+
+安全检查清单：
+  ✅ .env 文件是否被排除？
+  ✅ 密钥文件（*.pem, *.key）是否被排除？
+  ✅ .git 目录是否被排除？
+  ✅ 配置文件中的密码是否用环境变量替代？
+```
+
+### 3.6 使用 BuildKit 的秘密挂载
+
+```dockerfile
+# 如果构建时确实需要密钥（如 npm 私有仓库认证）
+# 使用 BuildKit 的 secret mount，不会进入镜像
+
+# syntax=docker/dockerfile:1
+FROM node:18-alpine
+
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc \
+    npm ci
+```
+
+```bash
+# 构建时传入密钥
+echo "//registry.npmjs.org/:_authToken=xxx" > .npmrc
+docker build --secret id=npmrc,src=.npmrc -t my-app .
+rm .npmrc
+```
+
+### 3.7 构建命令详解
 
 ```bash
 # 基本构建
@@ -381,30 +433,6 @@ docker build --no-cache -t my-app .
 
 # 指定目标阶段（多阶段构建时）
 docker build --target production -t my-app .
-```
-
-```
-构建过程输出：
-
-  $ docker build -t my-app .
-
-  Step 1/7 : FROM node:18-alpine
-   ---> a1b2c3d4e5f6                    ← 基础镜像 ID
-
-  Step 2/7 : WORKDIR /app
-   ---> Running in 1a2b3c4d5e6f          ← 创建临时容器执行
-   ---> 7f8e9d0c1b2a                     ← 新层 ID
-
-  Step 3/7 : COPY package.json .
-   ---> 3c4d5e6f7a8b
-
-  Step 4/7 : RUN npm install
-   ---> Running in 2b3c4d5e6f7a
-   ...（npm install 输出）...
-   ---> 9a0b1c2d3e4f
-
-  Successfully built 9a0b1c2d3e4f
-  Successfully tagged my-app:1.0
 ```
 
 ---
@@ -442,21 +470,6 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-```
-
-```json
-// package.json
-{
-  "name": "my-api",
-  "version": "1.0.0",
-  "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
-  },
-  "dependencies": {
-    "express": "^4.18.2"
-  }
-}
 ```
 
 ### 4.3 Dockerfile
@@ -508,9 +521,6 @@ README.md
 ```bash
 # 构建镜像
 docker build -t my-api:1.0 .
-
-# 查看镜像
-docker images my-api
 
 # 运行容器
 docker run -d --name api -p 3000:3000 my-api:1.0
@@ -564,7 +574,7 @@ COPY . .
 
   ❌ 不好的写法：
     COPY . .                    ← 缓存失效（文件变了）
-    RUN npm install             ← 缓存失效，重新安装依赖
+    RUN npm install             ← 缓存失效，重新安装依赖（30秒+）
 
   ✅ 好的写法：
     COPY package.json ...       ← 缓存命中（package.json 没变）
@@ -579,13 +589,10 @@ COPY . .
 
 ## 六、常见错误和解决
 
-### 6.1 错误：COPY failed: file not found
+### 6.1 COPY failed: file not found
 
 ```
 原因：文件不在构建上下文中
-
-  $ docker build -t my-app .
-  COPY failed: file not found in build context or excluded by .dockerignore
 
   检查：
   1. 文件是否在当前目录下
@@ -593,7 +600,7 @@ COPY . .
   3. 文件名大小写是否正确
 ```
 
-### 6.2 错误：npm install 失败
+### 6.2 npm install 失败
 
 ```
 原因：网络问题或依赖冲突
@@ -605,16 +612,32 @@ COPY . .
   3. 使用 --no-cache 重新构建
 ```
 
-### 6.3 错误：权限问题
+### 6.3 权限问题
 
 ```
 原因：容器内默认是 root 用户
 
-  解决方案：
-  创建专用用户并切换
+  解决方案：创建专用用户并切换
   RUN addgroup -g 1001 -S nodejs \
       && adduser -S nodeuser -u 1001
   USER nodeuser
+```
+
+### 6.4 .dockerignore 不生效
+
+```
+可能原因：
+
+  1. 文件名拼写错误
+     ❌ .docker-ignore
+     ✅ .dockerignore
+
+  2. 文件不在构建上下文根目录
+     ❌ ./src/.dockerignore
+     ✅ ./.dockerignore
+
+  3. 构建上下文路径不对
+     在项目根目录执行 docker build .
 ```
 
 ---
@@ -635,31 +658,17 @@ const server = http.createServer((req, res) => {
 server.listen(3000, () => console.log('Server on port 3000'));
 ```
 
-要求：
-- 使用 `node:18-alpine` 作为基础镜像
-- 工作目录设为 `/app`
-- 复制并运行 `app.js`
-- 暴露 3000 端口
+要求：使用 node:18-alpine、WORKDIR /app、暴露 3000 端口。
 
 ### 练习二：带依赖的项目
 
-创建一个使用 Express 的项目，编写完整的 Dockerfile：
-
 ```bash
-# 1. 创建项目目录
 mkdir express-docker && cd express-docker
-
-# 2. 初始化项目
 npm init -y
 npm install express
-
-# 3. 创建 src/index.js（使用上面的 Express 示例）
-
-# 4. 编写 Dockerfile
-
-# 5. 创建 .dockerignore
-
-# 6. 构建并运行
+# 创建 src/index.js（Express 示例）
+# 编写 Dockerfile
+# 创建 .dockerignore
 docker build -t express-demo .
 docker run -d -p 3000:3000 express-demo
 ```
@@ -671,7 +680,6 @@ docker run -d -p 3000:3000 express-demo
 # 2. 运行 docker build，观察错误信息
 # 3. 使用中间镜像调试
 docker build -t debug-app .
-# 如果失败，使用最后成功的层
 docker run -it <last-successful-image-id> /bin/sh
 ```
 
@@ -679,16 +687,14 @@ docker run -it <last-successful-image-id> /bin/sh
 
 ## 小结
 
-本课的核心要点：
-
 1. **Dockerfile 是镜像的构建配方**，由一系列指令组成
 2. **核心指令**：FROM（基础镜像）、RUN（执行命令）、COPY（复制文件）、WORKDIR（工作目录）、EXPOSE（声明端口）、CMD（启动命令）
 3. **构建上下文**是发送给 Docker 引擎的文件集合，用 `.dockerignore` 排除不需要的文件
-4. **构建缓存**：按层缓存，合理安排指令顺序可以大幅加速构建
-5. **安全实践**：使用非 root 用户、使用 `npm ci`、不泄露敏感信息
+4. **构建缓存**：按层缓存，先复制依赖文件再复制源码可以大幅加速构建
+5. **安全实践**：使用非 root 用户、排除 .env、不泄露敏感信息
 
 ---
 
 ## 下一课预告
 
-下一课我们将学习多阶段构建——如何把构建环境和运行环境分开，大幅减小镜像体积。这是生产级 Dockerfile 的必备技能。
+下一课我们将学习构建缓存深入和多阶段构建——如何把构建环境和运行环境分开，大幅减小镜像体积。

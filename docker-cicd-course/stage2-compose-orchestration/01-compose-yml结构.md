@@ -183,6 +183,8 @@ services:
       PORT: "3000"
 ```
 
+> 这里只展示语法。如何安全地管理环境变量（.env 文件策略、多环境配置、密钥管理），详见第四课。
+
 ### 3.4 依赖关系
 
 ```yaml
@@ -202,6 +204,8 @@ services:
       timeout: 5s
       retries: 5
 ```
+
+> `depends_on` 只保证容器启动，不保证服务就绪。配合 `healthcheck` + `condition: service_healthy` 才能确保服务真正可用。详见第六课。
 
 ---
 
