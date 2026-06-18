@@ -4,20 +4,40 @@
 
 ## 简介
 
-这个仓库存放了我利用 AI 生成的各类技术学习教程。当前课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库不再只保留 Markdown 讲义，也为重点课程补了贯穿式 final project / project kit，方便边学边验证。
+这个仓库存放了我利用 AI 生成的各类技术学习教程。课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时），以及多门基础技能和工程实践课程。所有重点课程都配有贯穿式 final project / project kit，方便边学边验证。
 
 ## 教程列表
 
+### AI 工程师学习路径
+
+系统化的 AI 工程师成长路线，7 门课程 + 毕业项目，详见 [ai-engineer-path/](./ai-engineer-path/)
+
+| 序号 | 课程 | 主题 | 课时 | 状态 |
+|------|------|------|------|------|
+| 01 | [ai-app-course](./ai-engineer-path/01-ai-app-course/) | AI 应用开发基础 | 35 | 规划完成 |
+| 02 | [ai-agent-engineer-course](./ai-engineer-path/02-ai-agent-engineer-course/) | AI Agent 全栈工程师 | 52 | 已完成 |
+| 03 | [llm-eval-course](./ai-engineer-path/03-llm-eval-course/) | LLM 评估与可观测性 | 30 | 规划中 |
+| 04 | [multi-agent-course](./ai-engineer-path/04-multi-agent-course/) | 多 Agent 编排 | 30 | 规划中 |
+| 05 | [mcp-dev-course](./ai-engineer-path/05-mcp-dev-course/) | MCP 协议深度开发 | 24 | 规划中 |
+| 06 | [llm-finetuning-course](./ai-engineer-path/06-llm-finetuning-course/) | 开源模型部署与微调 | 30 | 规划中 |
+| 07 | [multimodal-ai-course](./ai-engineer-path/07-multimodal-ai-course/) | 多模态 AI 应用 | 30 | 规划中 |
+| - | [graduation-project](./ai-engineer-path/graduation-project/) | AI 数据分析平台 | 4 周 | 规划中 |
+
+### 基础技能课程
+
 | 教程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
-| [ai-agent-engineer-course](./ai-agent-engineer-course/) | AI Agent 全栈工程师 | Vue 3 + FastAPI + RAG + Agent + 工作流 + MCP + 生产部署，52 课时 + 毕业项目 | 已完成 |
 | [backend-course](./backend-course/) | 全栈后端开发 | Node.js + Express + PostgreSQL + Docker，32 课时 + 完整项目 | 已完成 |
-| [spider-course](./spider-course/) | Python 爬虫 | Python + requests + Playwright + Scrapy，29 课时 + 综合项目 | 进行中 |
-| [ai-app-course](./ai-app-course/) | AI 应用开发 | 大模型 API + RAG + 工具调用 + Agent + AI 知识工作台 | 规划完成 |
 | [nextjs-fullstack-course](./nextjs-fullstack-course/) | Next.js 全栈产品 | App Router + Prisma + PostgreSQL + Auth + SaaS 产品 | 规划完成 |
-| [data-product-course](./data-product-course/) | 数据产品化 | ETL + FastAPI + Dashboard + 自动化数据产品 | 规划完成 |
-| [docker-cicd-course](./docker-cicd-course/) | Docker 与 CI/CD | Docker + Compose + GitHub Actions + 云部署 | 规划完成 |
 | [frontend-performance-course](./frontend-performance-course/) | 前端性能工程 | Core Web Vitals + React/Next 优化 + 性能监控 | 规划完成 |
+
+### 工程实践课程
+
+| 教程 | 主题 | 内容 | 状态 |
+|------|------|------|------|
+| [docker-cicd-course](./docker-cicd-course/) | Docker 与 CI/CD | Docker + Compose + GitHub Actions + 云部署 | 规划完成 |
+| [data-product-course](./data-product-course/) | 数据产品化 | ETL + FastAPI + Dashboard + 自动化数据产品 | 规划完成 |
+| [spider-course](./spider-course/) | Python 爬虫 | Python + requests + Playwright + Scrapy，29 课时 + 综合项目 | 进行中 |
 
 ## 特点
 
@@ -36,14 +56,23 @@ cd backend-course
 # 按 README.md 中的学习路线开始
 ```
 
+AI 工程师学习路径：
+
+```bash
+cd ai-engineer-path
+# 按路径总览的推荐顺序学习
+# 必修：01 → 02 → 03，然后按兴趣选修 04-07
+```
+
 也可以直接进入某门课的 final project：
 
 ```bash
 cd frontend-performance-course/final-project/performance-rescue-demo
 pnpm check
 
-cd ai-app-course/final-project/ai-knowledge-workspace-kit
+cd ai-engineer-path/01-ai-app-course/final-project/ai-knowledge-workspace-kit
 npm run check
 npm run ingest
+npm run ask
 npm run eval
 ```

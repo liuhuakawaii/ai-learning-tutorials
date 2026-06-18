@@ -22,6 +22,12 @@
 | `data-product-course` | 最终项目只有说明，没有最小闭环 | 补 CSV → ETL → SQLite → API → Dashboard demo |
 | `docker-cicd-course` | 部署课缺少可检查模板 | 补 Production Launch Kit，包含 API、Dockerfile、Compose、CI、脚本和检查器 |
 | `nextjs-fullstack-course` | 产品范围大，但缺少统一骨架 | 补 Micro SaaS Starter scaffold，包含路由、Prisma schema、权限矩阵和检查器 |
+| `03-llm-eval-course` | 新增课程，补齐 AI 评估能力 | 5 阶段 30 课时，评估对象直接来自 01/02 课程产出 |
+| `04-multi-agent-course` | 新增课程，多 Agent 编排进阶 | 5 阶段 30 课时，基于 02 课程的 Agent 基础扩展 |
+| `05-mcp-dev-course` | 新增课程，MCP 协议深度开发 | 4 阶段 24 课时，从协议层到生态集成 |
+| `06-llm-finetuning-course` | 新增课程，开源模型部署与微调 | 5 阶段 30 课时，LoRA/QLoRA 实战到部署 |
+| `07-multimodal-ai-course` | 新增课程，多模态 AI 应用 | 5 阶段 30 课时，视觉/语音/文档/多模态 RAG |
+| `graduation-project` | 毕业项目，串联全部 AI 课程 | AI 数据分析平台，多 Agent + MCP + RAG + 评估 |
 
 ## 保留风险
 
