@@ -33,22 +33,22 @@
 |------|------|------|------|------|
 | 01 | [ai-app-course](./01-ai-app-course/) | AI 应用开发基础：LLM API + RAG + 工具调用 + Agent | 35 | 规划完成 |
 | 02 | [ai-agent-engineer-course](./02-ai-agent-engineer-course/) | AI Agent 全栈工程师：FastAPI + LangGraph + MCP + 工作流 | 52 | 已完成 |
-| 03 | [llm-eval-course](./03-llm-eval-course/) | LLM 评估与可观测性：评估体系 + RAGAS + Langfuse + 持续优化 | 30 | 规划中 |
+| 03 | [llm-eval-course](./03-llm-eval-course/) | LLM 评估与可观测性：评估体系 + RAGAS + Langfuse + 持续优化 | 30 | 规划完成 |
 
 ### 选修（按兴趣/岗位选择）
 
 | 序号 | 课程 | 主题 | 课时 | 前置 | 状态 |
 |------|------|------|------|------|------|
-| 04 | [multi-agent-course](./04-multi-agent-course/) | 多 Agent 编排：LangGraph + 通信记忆 + 人机协作 | 30 | 02 | 规划中 |
-| 05 | [mcp-dev-course](./05-mcp-dev-course/) | MCP 协议深度开发：协议解析 + 自定义 Server + 生态集成 | 24 | 02 | 规划中 |
-| 06 | [llm-finetuning-course](./06-llm-finetuning-course/) | 开源模型部署与微调：Ollama + LoRA + 训练 Pipeline | 30 | 01 | 规划中 |
-| 07 | [multimodal-ai-course](./07-multimodal-ai-course/) | 多模态 AI 应用：视觉 + 语音 + 文档 + 多模态 RAG | 30 | 01 | 规划中 |
+| 04 | [multi-agent-course](./04-multi-agent-course/) | 多 Agent 编排：LangGraph + 通信记忆 + 人机协作 | 30 | 02 | 规划完成 |
+| 05 | [mcp-dev-course](./05-mcp-dev-course/) | MCP 协议深度开发：协议解析 + 自定义 Server + 生态集成 | 24 | 02 | 规划完成 |
+| 06 | [llm-finetuning-course](./06-llm-finetuning-course/) | 开源模型部署与微调：Ollama + LoRA + 训练 Pipeline | 30 | 01 | 规划完成 |
+| 07 | [multimodal-ai-course](./07-multimodal-ai-course/) | 多模态 AI 应用：视觉 + 语音 + 文档 + 多模态 RAG | 30 | 01 | 规划完成 |
 
 ### 毕业项目
 
 | 项目 | 主题 | 串联课程 | 状态 |
 |------|------|----------|------|
-| [graduation-project](./graduation-project/) | AI 数据分析平台 | 01-07 全部 | 规划中 |
+| [graduation-project](./graduation-project/) | AI 数据分析平台 | 01-07 全部 | 进行中 |
 
 ## 学习建议
 

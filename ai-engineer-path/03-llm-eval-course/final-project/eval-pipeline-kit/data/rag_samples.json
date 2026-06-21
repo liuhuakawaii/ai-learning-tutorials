@@ -1,0 +1,21 @@
+[
+  {
+    "question": "如何优化 RAG 的检索质量？",
+    "answer": "可以通过优化 chunk 策略、使用混合检索（向量+关键词）、重排序、查询改写等方法提升检索质量。",
+    "ground_truth": "优化 RAG 检索质量的方法包括：chunk 策略优化、混合检索、重排序、查询改写。",
+    "retrieved_contexts": [
+      "Chunk 策略对检索质量有重要影响。",
+      "混合检索结合向量搜索和关键词匹配。",
+      "重排序可以提升检索结果的相关性。"
+    ]
+  },
+  {
+    "question": "LangGraph 中的 State 有什么作用？",
+    "answer": "State 是 LangGraph 中 Agent 间共享的数据结构，定义了工作流的上下文信息。",
+    "ground_truth": "LangGraph 的 State 是一个 TypedDict，用于在 Node 间传递和共享数据。",
+    "retrieved_contexts": [
+      "LangGraph 使用 TypedDict 定义 State。",
+      "State 在 Node 之间传递共享数据。"
+    ]
+  }
+]

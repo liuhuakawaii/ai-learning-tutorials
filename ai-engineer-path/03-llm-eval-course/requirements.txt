@@ -1,0 +1,11 @@
+# 03-llm-eval-course 课程依赖
+# 安装：pip install -r requirements.txt
+
+deepeval>=1.0.0
+ragas>=0.1.0
+langfuse>=2.0.0
+pandas>=2.0.0
+streamlit>=1.30.0
+pytest>=8.0.0
+jsonschema>=4.0.0
+openai>=1.12.0

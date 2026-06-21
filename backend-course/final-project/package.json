@@ -4,6 +4,7 @@
   "description": "博客平台 API — 课程最终项目",
   "main": "dist/app.js",
   "scripts": {
+    "check": "node scripts/check.js",
     "dev": "tsx watch src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",

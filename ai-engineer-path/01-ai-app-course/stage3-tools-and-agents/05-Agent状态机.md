@@ -1,4 +1,4 @@
-﻿# 第5课：Agent 状态机——pending、running、blocked、done、failed
+# 第5课：Agent 状态机——pending、running、blocked、done、failed
 
 > **课程定位**：设计可靠的 Agent 任务状态
 > **前置知识**：第 4 课的多步骤任务
@@ -533,6 +533,4 @@ export function AgentStatus({ status, steps, result, error }: Props) {
 
 ---
 
-## 下一课预告
-
-下一课我们将学习人工确认：如何设计高风险操作的确认流程。
+**下一课**: [第6课：人工确认——高风险工具的确认流程](./06-人工确认流程.md)

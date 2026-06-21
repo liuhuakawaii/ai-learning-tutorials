@@ -2,6 +2,12 @@
 
 > 掌握 Model Context Protocol 的协议细节与工程实践，成为 AI 工具生态的建设者
 
+## 前置要求
+
+- **必修前置**：[02-ai-agent-engineer-course](../02-ai-agent-engineer-course/)
+- **技术基础**：Python 3.12 或 TypeScript，了解 Function Calling 概念
+- **建议**：有开发 API 或 SDK 的经验
+
 ## 适合谁
 
 - 学完了 02-ai-agent-engineer-course、想深入 MCP 协议的开发者

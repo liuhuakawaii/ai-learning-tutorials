@@ -31,7 +31,11 @@
 
 ## 贯穿项目
 
-本课程使用 `Market Insight Dashboard` 作为贯穿项目。仓库内置一个最小可运行闭环：
+本课程使用 `Market Insight Dashboard` 作为贯穿项目。
+
+> **关于 demo 技术栈的说明**：课程讲义以 Python（pandas、FastAPI）为主，但内置 demo 使用 Node.js 实现（原生 HTTP + 纯 JS ETL），目的是零依赖、一行命令即可运行。学员在学完第二、三阶段后，应自行用 Python + pandas + FastAPI 重建 demo 的 ETL 和 API 层，作为学习验证。
+
+仓库内置一个最小可运行闭环：
 
 ```bash
 cd data-product-course/final-project/market-insight-demo

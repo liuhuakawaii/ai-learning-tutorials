@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+*.js
+*.d.ts
+*.js.map
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+reports/check-report.json

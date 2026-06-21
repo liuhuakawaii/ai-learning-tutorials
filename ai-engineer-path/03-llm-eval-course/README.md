@@ -2,6 +2,12 @@
 
 > 学会科学地衡量 AI 应用质量，让你的 Agent 和 RAG 系统从"能用"变成"好用"
 
+## 前置要求
+
+- **必修前置**：[01-ai-app-course](../01-ai-app-course/) + [02-ai-agent-engineer-course](../02-ai-agent-engineer-course/)
+- **技术基础**：Python 3.12，了解 RAG 和 Agent 的基本概念
+- **建议**：已完成前两门课的 final project
+
 ## 适合谁
 
 - 学完 AI 应用开发课程、想验证和提升产品质量的开发者

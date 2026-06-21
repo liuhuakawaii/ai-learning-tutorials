@@ -1,0 +1,42 @@
+{
+  "name": "ai-code-assistant-kit",
+  "version": "1.0.0",
+  "description": "AI 编程助手工具集 - 集成 Prompt 模板、代码审查、测试生成",
+  "main": "dist/index.js",
+  "type": "module",
+  "bin": {
+    "ai-kit": "dist/index.js"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ --ext .ts",
+    "check": "node scripts/check.cjs"
+  },
+  "keywords": [
+    "ai",
+    "code-assistant",
+    "prompt-templates",
+    "code-review",
+    "test-generation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0",
+    "@vitest/coverage-v8": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

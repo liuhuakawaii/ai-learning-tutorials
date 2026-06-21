@@ -2,6 +2,12 @@
 
 > 从零构建企业级 AI Agent 平台：Vue 3 + FastAPI + RAG + Agent + 工作流 + MCP + 生产部署。不是概念 PPT，是每一行代码都能跑的硬核实战。
 
+## 前置要求
+
+- **必修前置**：[01-ai-app-course](../01-ai-app-course/)（AI 应用开发基础）
+- **技术基础**：熟悉 TypeScript/JavaScript，了解 HTTP 和 API 调用
+- **建议**：有 Vue 或 React 开发经验
+
 ## 这门课解决什么问题
 
 你可能已经会写前端页面，也调过大模型 API 拼过几个 demo。但企业要的不是 demo——他们要的是：

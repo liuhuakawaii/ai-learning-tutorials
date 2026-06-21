@@ -1,99 +1,260 @@
-# 01 从单 Agent 到多 Agent——为什么需要多个 Agent 协作
+# 第 1 课：从单 Agent 到多 Agent——为什么需要多个 Agent 协作
 
-> 一个人干不了所有事，一个 Agent 也不行。
+> **课程定位**：理解多 Agent 系统的核心动机和设计思路
+> **前置知识**：02-ai-agent-engineer-course 的单 Agent 开发经验
+> **预计时长**：40 分钟
+
+---
 
 ## 学习目标
 
-- 理解单 Agent 的局限性
-- 掌握多 Agent 协作的核心价值
-- 了解多 Agent 系统的典型应用场景
+完成本课学习后，你将能够：
+
+1. 说出单 Agent 系统的四个核心局限
+2. 用自己的话解释多 Agent 协作的价值
+3. 判断一个任务是否适合用多 Agent 架构
+4. 设计一个简单的多 Agent 流水线系统
 
 ---
 
-## 一、单 Agent 的局限
+## 一、单 Agent 的天花板
+
+### 1.1 上下文窗口瓶颈
 
 ```
-单 Agent 的天花板：
+单 Agent 的上下文限制：
 
-1. 上下文窗口限制
-   - 单个 Agent 的上下文有限
-   - 复杂任务需要大量上下文
-   - 上下文越多，推理越慢、成本越高
+  以 GPT-4o 为例：
+  上下文窗口 = 128K tokens
 
-2. 专业能力分散
-   - 一个 Agent 要掌握所有技能
-   - "样样通，样样松"
-   - 难以针对特定任务深度优化
+  听起来很大？算一笔账：
 
-3. 错误累积
-   - 多步推理中，每步都可能出错
-   - 错误会逐步累积
-   - 越复杂的任务，失败率越高
+  一次复杂任务的上下文消耗：
+  ┌────────────────────────────────┬───────────┐
+  │  内容                          │  tokens   │
+  ├────────────────────────────────┼───────────┤
+  │  系统 Prompt                   │  2,000    │
+  │  工具定义（10 个工具）          │  3,000    │
+  │  对话历史（10 轮）             │  15,000   │
+  │  检索到的文档（5 篇）          │  20,000   │
+  │  中间推理过程                  │  10,000   │
+  │  ────────────────────────────  │  ──────── │
+  │  总计                          │  50,000   │
+  └────────────────────────────────┴───────────┘
 
-4. 可控性差
-   - 单 Agent 的行为难以精确控制
-   - 高风险操作难以隔离
-   - 难以实现细粒度的权限管理
+  剩余空间：128K - 50K = 78K
+
+  如果任务更复杂（更多工具、更长对话、更多文档）？
+  → 上下文很快就不够用了
+  → 模型开始"遗忘"早期信息
+  → 推理质量下降
+```
+
+### 1.2 专业能力稀释
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    "样样通，样样松" 问题                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  单 Agent 的 Prompt：                                           │
+│  "你是一个全能助手，可以写代码、做分析、写报告、回答问题..."       │
+│                                                                 │
+│  问题：                                                         │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  角色 A：写 Python 代码                                 │   │
+│  │  角色 B：做数据统计分析                                  │   │
+│  │  角色 C：撰写商业报告                                   │   │
+│  │  角色 D：回答用户问题                                   │   │
+│  │                                                         │   │
+│  │  一个 Agent 同时扮演 4 个角色                            │   │
+│  │  → 每个角色都不够专业                                    │   │
+│  │  → 容易混淆不同任务的上下文                               │   │
+│  │  → Prompt 越长，指令遵循越差                              │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  多 Agent 的做法：                                               │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  Coder Agent：只写代码，Prompt 精准聚焦                  │   │
+│  │  Analyst Agent：只做分析，Prompt 专注统计                 │   │
+│  │  Writer Agent：只写报告，Prompt 专注写作                  │   │
+│  │  QA Agent：只回答问题，Prompt 专注问答                    │   │
+│  │                                                         │   │
+│  │  每个 Agent 的 Prompt 更短、更精准                        │   │
+│  │  → 专业能力更强                                          │   │
+│  │  → 指令遵循更好                                          │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 1.3 错误累积效应
+
+```
+单 Agent 多步推理的错误累积：
+
+  假设每步正确率 95%
+
+  1 步任务：95%
+  5 步任务：0.95^5 = 77%
+  10 步任务：0.95^10 = 60%
+  20 步任务：0.95^20 = 36%
+
+  ┌────────────────────────────────────────────┐
+  │  步骤数 vs 成功率                           │
+  │                                            │
+  │  100% ┤●                                   │
+  │   90% ┤ ●                                  │
+  │   80% ┤  ●                                 │
+  │   70% ┤   ●                                │
+  │   60% ┤    ●                               │
+  │   50% ┤     ●                              │
+  │   40% ┤      ●                             │
+  │   30% ┤       ●●                           │
+  │   20% ┤         ●●●                        │
+  │   10% ┤            ●●●●●                   │
+  │    0% ┤─────────────────●●●●●●●●           │
+  │      └──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──    │
+  │         1  3  5  7  9 11 13 15 17 19 21    │
+  │                   步骤数                    │
+  └────────────────────────────────────────────┘
+
+  多 Agent 的解决方案：
+  - 每个 Agent 只负责 2-3 步
+  - Agent 之间有明确的输入输出边界
+  - 下游 Agent 可以验证上游的输出
+  - 失败时只需重跑单个 Agent，不用全部重来
+```
+
+### 1.4 可控性差
+
+```
+单 Agent 的可控性问题：
+
+  场景：一个 Agent 需要同时处理：
+  - 读取用户文件（低风险）
+  - 查询数据库（中风险）
+  - 调用支付 API（高风险）
+
+  问题：
+  1. 无法对不同操作设置不同权限
+  2. 无法在高风险操作前添加人工审批
+  3. 无法追踪哪个"能力"出了问题
+  4. 一个 Prompt 注入可能影响所有能力
+
+  多 Agent 的解决方案：
+  ┌─────────────────────────────────────────────────┐
+  │  File Agent    → 只能读文件，权限最小            │
+  │  DB Agent      → 只能查询，不能修改              │
+  │  Payment Agent → 需要人工审批才能执行            │
+  │                                                  │
+  │  每个 Agent 独立的权限边界                        │
+  │  高风险操作可以加审批 gate                        │
+  │  出问题可以精确定位是哪个 Agent                   │
+  └─────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 二、多 Agent 的价值
+## 二、多 Agent 的核心价值
+
+### 2.1 专业化分工
 
 ```
-多 Agent 协作的核心价值：
+类比：医院的分科制度
 
-1. 专业化分工
-   - 每个 Agent 专注一个领域
-   - 可以针对特定任务深度优化
-   - 提高整体质量
+  没有分科的"全能医生"：
+  - 内科、外科、眼科、牙科都看
+  - 每个领域都懂一点，但不精
+  - 复杂病例容易误诊
 
-2. 并行处理
-   - 多个 Agent 可以并行工作
-   - 提高处理效率
-   - 降低总延迟
+  有分科的专业医院：
+  - 每个科室专注一个领域
+  - 专家级诊断能力
+  - 复杂病例可以多科室会诊
 
-3. 错误隔离
-   - 单个 Agent 失败不影响整体
-   - 可以针对失败 Agent 单独处理
-   - 提高系统鲁棒性
+  多 Agent 系统同理：
+  - 每个 Agent 专注一个"科室"
+  - 专业 Prompt + 专业工具
+  - 复杂任务可以多 Agent 协作
+```
 
-4. 可控性增强
-   - 可以对不同 Agent 设置不同权限
-   - 可以在关键节点添加人工审批
-   - 可以追踪每个 Agent 的行为
+### 2.2 并行处理
+
+```
+串行 vs 并行：
+
+  任务：分析 3 个竞品的功能、价格、用户评价
+
+  单 Agent（串行）：
+  分析竞品 A → 分析竞品 B → 分析竞品 C → 汇总
+  总耗时 = T_A + T_B + T_C = 3T
+
+  多 Agent（并行）：
+  ┌─ 分析 Agent 1 → 竞品 A ─┐
+  ├─ 分析 Agent 2 → 竞品 B ─┤ → 汇总 Agent
+  └─ 分析 Agent 3 → 竞品 C ─┘
+  总耗时 = max(T_A, T_B, T_C) + T_汇总 ≈ T + T_汇总
+
+  加速比 ≈ 3x（假设有 3 个并行 Agent）
+```
+
+### 2.3 错误隔离
+
+```
+错误隔离示意：
+
+  单 Agent：
+  ┌─────────────────────────────────────┐
+  │  步骤1 → 步骤2 → 步骤3 → 步骤4     │
+  │         ↑ 错误在这里                 │
+  │  整个流程失败，需要全部重来           │
+  └─────────────────────────────────────┘
+
+  多 Agent：
+  ┌─────────────────────────────────────┐
+  │  Agent1 → Agent2 → Agent3 → Agent4  │
+  │           ↑ 错误在这里               │
+  │  只需重跑 Agent2，其他 Agent 的结果保留│
+  └─────────────────────────────────────┘
+
+  更好的做法：
+  - 每个 Agent 有重试机制
+  - 可以设置降级策略（Agent 失败时用备选方案）
+  - 可以记录每个 Agent 的输入输出用于调试
 ```
 
 ---
 
-## 三、多 Agent 应用场景
+## 三、什么时候用多 Agent
 
 ```
-典型场景：
+适合多 Agent 的场景：
 
-1. 研究助手
-   - 搜索 Agent：收集信息
-   - 分析 Agent：提取洞察
-   - 写作 Agent：生成报告
-   - 审核 Agent：质量把关
+  ✓ 任务可以分解为独立子任务
+  ✓ 不同子任务需要不同的"专业能力"
+  ✓ 子任务之间有明确的数据流
+  ✓ 需要并行处理提高效率
+  ✓ 需要在关键节点添加人工审批
+  ✓ 需要细粒度的权限控制
 
-2. 客服系统
-   - 路由 Agent：识别问题类型
-   - 专业 Agent：处理特定领域
-   - 升级 Agent：处理复杂问题
-   - 质检 Agent：监控服务质量
+不适合多 Agent 的场景：
 
-3. 数据分析
-   - 查询 Agent：生成 SQL
-   - 分析 Agent：统计分析
-   - 可视化 Agent：生成图表
-   - 报告 Agent：生成报告
+  ✗ 任务简单，单 Agent 就能搞定
+  ✗ 子任务高度耦合，无法独立执行
+  ✗ 延迟敏感，Agent 间通信开销不可接受
+  ✗ 预算有限，多 Agent 的 Token 消耗更高
 
-4. 代码开发
-   - 架构 Agent：设计架构
-   - 编码 Agent：编写代码
-   - 测试 Agent：编写测试
-   - 审查 Agent：代码审查
+决策流程图：
+┌─────────────────────────────────────────────────┐
+│  任务是否复杂？                                   │
+│  ├── 否 → 用单 Agent                             │
+│  └── 是 → 能否分解为独立子任务？                  │
+│           ├── 否 → 用单 Agent + 长 Prompt         │
+│           └── 是 → 不同子任务需要不同能力？        │
+│                    ├── 否 → 用单 Agent + 循环     │
+│                    └── 是 → 用多 Agent             │
+└─────────────────────────────────────────────────┘
 ```
 
 ---
@@ -101,60 +262,94 @@
 ## 四、第一个多 Agent 示例
 
 ```python
+"""
+纯 Python 实现的多 Agent 流水线。
+不依赖任何框架，展示多 Agent 的核心思想。
+"""
+from dataclasses import dataclass
+from typing import Callable
+
+
+@dataclass
+class AgentMessage:
+    """Agent 间传递的消息。"""
+    sender: str
+    content: str
+    metadata: dict = None
+
+
 class SimpleAgent:
-    """简单的 Agent"""
-    
-    def __init__(self, name: str, role: str, llm):
+    """简单的 Agent 基类。"""
+
+    def __init__(self, name: str, role: str, process_fn: Callable[[str], str]):
         self.name = name
         self.role = role
-        self.llm = llm
-    
-    def execute(self, task: str) -> str:
-        prompt = f"""你是一个{self.role}。
-        
-任务：{task}
+        self.process_fn = process_fn
 
-请完成任务并返回结果。"""
-        
-        response = self.llm.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content
-
-class MultiAgentSystem:
-    """简单的多 Agent 系统"""
-    
-    def __init__(self):
-        self.agents = {}
-    
-    def add_agent(self, agent: SimpleAgent):
-        self.agents[agent.name] = agent
-    
-    def run_pipeline(self, task: str, pipeline: list[str]) -> str:
-        """按顺序执行 Agent 流水线"""
-        result = task
-        
-        for agent_name in pipeline:
-            agent = self.agents[agent_name]
-            print(f"[{agent_name}] 处理中...")
-            result = agent.execute(result)
-            print(f"[{agent_name}] 完成")
-        
+    def execute(self, input_text: str) -> str:
+        print(f"  [{self.role}] 开始处理...")
+        result = self.process_fn(input_text)
+        print(f"  [{self.role}] 处理完成，输出 {len(result)} 字符")
         return result
 
+
+class Pipeline:
+    """Agent 流水线。"""
+
+    def __init__(self):
+        self.agents: list[SimpleAgent] = []
+
+    def add(self, agent: SimpleAgent) -> "Pipeline":
+        self.agents.append(agent)
+        return self
+
+    def run(self, initial_input: str) -> str:
+        result = initial_input
+        for agent in self.agents:
+            result = agent.execute(result)
+        return result
+
+
 # 使用示例
-llm = OpenAI()
+def mock_search(input_text: str) -> str:
+    return f"搜索结果：关于「{input_text}」的 3 篇文章摘要..."
 
-system = MultiAgentSystem()
-system.add_agent(SimpleAgent("researcher", "研究专家", llm))
-system.add_agent(SimpleAgent("analyst", "数据分析师", llm))
-system.add_agent(SimpleAgent("writer", "写作专家", llm))
+def mock_analyze(input_text: str) -> str:
+    return f"分析洞察：从搜索结果中提取了 3 个关键趋势..."
 
-result = system.run_pipeline(
-    "分析 2024 年 AI 行业的发展趋势",
-    ["researcher", "analyst", "writer"]
-)
+def mock_write(input_text: str) -> str:
+    return f"研究报告：基于分析结果生成的完整报告...\n\n{input_text}"
+
+
+pipeline = Pipeline()
+pipeline.add(SimpleAgent("searcher", "搜索专家", mock_search))
+pipeline.add(SimpleAgent("analyst", "分析专家", mock_analyze))
+pipeline.add(SimpleAgent("writer", "写作专家", mock_write))
+
+result = pipeline.run("2025 年 AI Agent 发展趋势")
+print(f"\n最终输出:\n{result}")
+```
+
+---
+
+## 五、常见误区
+
+```
+误区 1：多 Agent 一定比单 Agent 好
+  事实：简单任务用多 Agent 反而更慢、更贵、更难调试
+  建议：先用单 Agent，效果不够再考虑多 Agent
+
+误区 2：Agent 越多越好
+  事实：Agent 越多，通信开销越大，协调越复杂
+  建议：从 2-3 个 Agent 开始，按需增加
+
+误区 3：多 Agent 可以完全替代人工
+  事实：关键决策仍需人工审批
+  建议：在高风险节点添加 Human-in-the-loop
+
+误区 4：Agent 间的通信不重要
+  事实：通信设计是多 Agent 系统的核心难题
+  建议：先设计好 Agent 间的输入输出格式
 ```
 
 ---
@@ -164,20 +359,22 @@ result = system.run_pipeline(
 ```
 本课核心要点：
 
-1. 单 Agent 有上下文、专业能力、错误累积、可控性等局限
-2. 多 Agent 的价值：专业化分工、并行处理、错误隔离、可控性
-3. 多 Agent 适用于复杂任务、需要多技能、需要高可靠性的场景
-4. 最简单的多 Agent 是流水线模式
+1. 单 Agent 的四个局限：上下文瓶颈、能力稀释、错误累积、可控性差
+2. 多 Agent 的四个价值：专业分工、并行处理、错误隔离、可控性增强
+3. 判断标准：任务可分解 + 需要不同能力 + 有明确数据流 → 用多 Agent
+4. 最简单的多 Agent 是流水线模式，用纯 Python 就能实现
 
-下一课：编排模式概览——Supervisor / Sequential / Parallel / Hierarchical。
+---
+
+**下一课**: [编排模式概览——Supervisor / Sequential / Parallel / Hierarchical](./02-编排模式概览.md)
 ```
 
 ---
 
 ## 练习
 
-1. **分析题**：分析你的一个 AI 应用，看是否适合用多 Agent 架构。
+1. **分析题**：选择你做过的一个 AI 项目，分析它是否有单 Agent 的局限。如果有，设计一个多 Agent 方案。
 
-2. **设计题**：设计一个多 Agent 研究助手的架构，定义每个 Agent 的职责。
+2. **实现题**：扩展上面的 Pipeline 示例，添加错误处理（某个 Agent 失败时重试 1 次）和日志记录（记录每个 Agent 的输入输出）。
 
-3. **实现题**：实现一个简单的流水线多 Agent 系统。
+3. **设计题**：设计一个"代码审查"多 Agent 系统，定义每个 Agent 的职责、输入输出格式、以及它们之间的协作流程。

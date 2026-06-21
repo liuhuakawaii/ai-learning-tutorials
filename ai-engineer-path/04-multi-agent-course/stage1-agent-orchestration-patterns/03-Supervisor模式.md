@@ -167,7 +167,9 @@ Supervisor 设计要点：
 3. 设计要点：任务分析、分解、Agent 选择、结果汇总
 4. Supervisor 本身也是一个 Agent
 
-下一课：Sequential Pipeline——按顺序传递的链式 Agent 工作流。
+---
+
+**下一课**: [Sequential Pipeline——按顺序传递的链式 Agent 工作流](./04-Sequential-Pipeline.md)
 ```
 
 ---

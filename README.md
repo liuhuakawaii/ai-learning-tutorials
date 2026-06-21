@@ -16,12 +16,12 @@
 |------|------|------|------|------|
 | 01 | [ai-app-course](./ai-engineer-path/01-ai-app-course/) | AI 应用开发基础 | 35 | 规划完成 |
 | 02 | [ai-agent-engineer-course](./ai-engineer-path/02-ai-agent-engineer-course/) | AI Agent 全栈工程师 | 52 | 已完成 |
-| 03 | [llm-eval-course](./ai-engineer-path/03-llm-eval-course/) | LLM 评估与可观测性 | 30 | 规划中 |
-| 04 | [multi-agent-course](./ai-engineer-path/04-multi-agent-course/) | 多 Agent 编排 | 30 | 规划中 |
-| 05 | [mcp-dev-course](./ai-engineer-path/05-mcp-dev-course/) | MCP 协议深度开发 | 24 | 规划中 |
-| 06 | [llm-finetuning-course](./ai-engineer-path/06-llm-finetuning-course/) | 开源模型部署与微调 | 30 | 规划中 |
-| 07 | [multimodal-ai-course](./ai-engineer-path/07-multimodal-ai-course/) | 多模态 AI 应用 | 30 | 规划中 |
-| - | [graduation-project](./ai-engineer-path/graduation-project/) | AI 数据分析平台 | 4 周 | 规划中 |
+| 03 | [llm-eval-course](./ai-engineer-path/03-llm-eval-course/) | LLM 评估与可观测性 | 30 | 规划完成 |
+| 04 | [multi-agent-course](./ai-engineer-path/04-multi-agent-course/) | 多 Agent 编排 | 30 | 规划完成 |
+| 05 | [mcp-dev-course](./ai-engineer-path/05-mcp-dev-course/) | MCP 协议深度开发 | 24 | 规划完成 |
+| 06 | [llm-finetuning-course](./ai-engineer-path/06-llm-finetuning-course/) | 开源模型部署与微调 | 30 | 规划完成 |
+| 07 | [multimodal-ai-course](./ai-engineer-path/07-multimodal-ai-course/) | 多模态 AI 应用 | 30 | 规划完成 |
+| - | [graduation-project](./ai-engineer-path/graduation-project/) | AI 数据分析平台 | 4 周 | 进行中 |
 
 ### 基础技能课程
 
@@ -38,6 +38,15 @@
 | [docker-cicd-course](./docker-cicd-course/) | Docker 与 CI/CD | Docker + Compose + GitHub Actions + 云部署 | 规划完成 |
 | [data-product-course](./data-product-course/) | 数据产品化 | ETL + FastAPI + Dashboard + 自动化数据产品 | 规划完成 |
 | [spider-course](./spider-course/) | Python 爬虫 | Python + requests + Playwright + Scrapy，29 课时 + 综合项目 | 进行中 |
+
+### 专项进阶课程
+
+| 教程 | 主题 | 内容 | 状态 |
+|------|------|------|------|
+| [ai-coding-engineering-course](./ai-coding-engineering-course/) | AI 编程工程 | Cursor / Copilot / Prompt for Code / 团队规范，34 课时 | 规划完成 |
+| [prompt-engineering-course](./prompt-engineering-course/) | Prompt Engineering 深度课 | 结构化 Prompt / 测试 / 生产级 / 高级技巧，30 课时 | 规划完成 |
+| [ai-security-course](./ai-security-course/) | AI 安全与对抗 | Prompt 注入 / 越狱 / 红队测试 / 安全工程，30 课时 | 规划完成 |
+| [rag-engineering-course](./rag-engineering-course/) | RAG 工程化 | 检索优化 / GraphRAG / Agentic RAG / 生产部署，30 课时 | 规划完成 |
 
 ## 特点
 

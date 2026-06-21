@@ -135,7 +135,9 @@ response = requests.get("http://localhost:8000/metrics")
 3. 支持量化、张量并行、连续批处理
 4. 适合高吞吐量生产场景
 
-下一课：OpenAI 兼容 API——让本地模型接入现有的 AI 应用。
+---
+
+**下一课**: [05 OpenAI 兼容 API——让本地模型接入现有的 AI 应用](./05-OpenAI兼容API.md)
 ```
 
 ---

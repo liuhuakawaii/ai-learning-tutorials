@@ -143,7 +143,9 @@ class ResilientPipeline(AgentPipeline):
 3. 错误处理：重试、降级、人工介入
 4. 流水线要保持简单，避免过长
 
-下一课：Parallel Fan-out——并行执行后聚合的 Map-Reduce 模式。
+---
+
+**下一课**: [Parallel Fan-out——并行执行后聚合的 Map-Reduce 模式](./05-Parallel-Fan-out.md)
 ```
 
 ---

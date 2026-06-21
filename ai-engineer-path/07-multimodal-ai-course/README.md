@@ -2,6 +2,12 @@
 
 > 突破纯文本边界，掌握图像、语音、文档等多模态 AI 能力的工程实践
 
+## 前置要求
+
+- **必修前置**：[01-ai-app-course](../01-ai-app-course/)
+- **建议前置**：[02-ai-agent-engineer-course](../02-ai-agent-engineer-course/)（多模态 Agent 部分需要）
+- **技术基础**：Python 3.12 或 TypeScript，了解 LLM API 调用
+
 ## 适合谁
 
 - 想让 AI 应用处理图片、语音、视频而不只是文本的开发者

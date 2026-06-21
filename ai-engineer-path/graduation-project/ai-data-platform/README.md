@@ -80,28 +80,51 @@ docker-compose up -d
 
 ```
 ai-data-platform/
-├── backend/                # FastAPI 后端
-│   ├── agents/            # Agent 定义
-│   │   └── orchestrator.py # LangGraph 编排
-│   ├── api/               # API 路由
-│   │   ├── chat.py        # 对话 API
-│   │   ├── data.py        # 数据 API
-│   │   └── eval.py        # 评估 API
-│   ├── data/              # 数据
-│   │   └── seed.py        # 数据库初始化
-│   ├── main.py            # FastAPI 入口
-│   ├── config.py          # 配置
-│   └── requirements.txt   # Python 依赖
-├── frontend/              # Next.js 前端
-│   ├── app/               # 页面
-│   │   ├── layout.tsx     # 布局
-│   │   ├── page.tsx       # 主页面
-│   │   └── globals.css    # 全局样式
-│   ├── package.json       # Node 依赖
-│   └── tailwind.config.js # Tailwind 配置
-├── docker-compose.yml     # Docker 编排
-└── README.md              # 项目说明
+├── backend/                     # FastAPI 后端
+│   ├── agents/                  # Agent 定义
+│   │   └── orchestrator.py      # LangGraph 编排（已完成）
+│   ├── api/                     # API 路由
+│   │   ├── chat.py              # 对话 API
+│   │   ├── data.py              # 数据 API
+│   │   └── eval.py              # 评估 API
+│   ├── mcp_servers/             # MCP Server（骨架）
+│   │   ├── database_server.py   # 数据库 MCP Server
+│   │   └── file_server.py       # 文件系统 MCP Server
+│   ├── observability/           # 可观测性（骨架）
+│   │   └── langfuse_config.py   # Langfuse 配置
+│   ├── eval/                    # 评估系统（骨架）
+│   │   └── eval_pipeline.py     # 评估 pipeline
+│   ├── data/                    # 数据
+│   │   └── seed.py              # 数据库初始化
+│   ├── main.py                  # FastAPI 入口
+│   ├── config.py                # 配置
+│   └── requirements.txt         # Python 依赖
+├── data/
+│   └── eval_dataset/            # 评估数据集
+│       └── golden_dataset.json
+├── frontend/                    # Next.js 前端
+│   ├── app/                     # 页面
+│   ├── package.json             # Node 依赖
+│   └── tailwind.config.js       # Tailwind 配置
+├── docker-compose.yml           # Docker 编排
+└── README.md
 ```
+
+## 实现状态
+
+| 模块 | 状态 | 说明 |
+|------|------|------|
+| 查询 Agent | ✅ 已完成 | 自然语言 → SQL → 执行 |
+| 分析 Agent | ✅ 已完成 | 数据统计与洞察 |
+| 可视化 Agent | ✅ 已完成 | 图表类型推荐 |
+| 报告 Agent | ✅ 已完成 | 结构化报告生成 |
+| LangGraph 编排 | ✅ 已完成 | 4 Agent 流水线 |
+| Mock 模式 | ✅ 已完成 | 无需 API Key 即可运行 |
+| MCP Server | 🔲 骨架 | 需根据 05 课程完成实现 |
+| Langfuse 集成 | 🔲 骨架 | 需根据 03 课程完成实现 |
+| 多模态输入 | 🔲 待实现 | 需根据 07 课程添加 |
+| 人工审批流 | 🔲 待实现 | 需根据 04 课程添加 |
+| 评估系统 | 🔲 骨架 | 需根据 03 课程完成实现 |
 
 ## 验收标准
 

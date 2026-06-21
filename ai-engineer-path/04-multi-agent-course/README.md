@@ -2,6 +2,12 @@
 
 > 从单 Agent 到多 Agent 协作，掌握企业级 AI Agent 编排的核心模式
 
+## 前置要求
+
+- **必修前置**：[02-ai-agent-engineer-course](../02-ai-agent-engineer-course/)
+- **建议前置**：[03-llm-eval-course](../03-llm-eval-course/)（评估能力对多 Agent 系统很重要）
+- **技术基础**：Python 3.12，熟悉 LangGraph 或 LangChain 基础
+
 ## 适合谁
 
 - 学完了 02-ai-agent-engineer-course、想进一步提升 Agent 能力的开发者

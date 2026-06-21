@@ -1,4 +1,4 @@
-﻿# 第2课：文档解析——PDF、Markdown、TXT、网页内容
+# 第2课：文档解析——PDF、Markdown、TXT、网页内容
 
 > **课程定位**：把各种格式的文档变成可处理的文本
 > **前置知识**：第 1 课 RAG 概念
@@ -431,6 +431,4 @@ function validateParsedDocument(doc: ParsedDocument): {
 
 ---
 
-## 下一课预告
-
-下一课我们将学习文本切分（Chunking）：如何把长文档切成合适大小的片段，以及如何设计切分策略。
+**下一课**: [第3课：Chunk 策略——大小、重叠、标题层级和元数据](./03-Chunk策略大小重叠与元数据.md)

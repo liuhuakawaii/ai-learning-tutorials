@@ -117,7 +117,9 @@ ollama ps
 3. 提供 OpenAI 兼容 API
 4. 支持自定义模型和配置优化
 
-下一课：llama.cpp 深入——GGUF 格式、量化级别、推理参数调优。
+---
+
+**下一课**: [03 llama.cpp 深入——GGUF 格式、量化级别、推理参数调优](./03-llama-cpp深入.md)
 ```
 
 ---

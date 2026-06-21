@@ -212,7 +212,9 @@ def evaluate_and_score(question: str, answer: str, contexts: list[str]):
 3. 集成评估结果到 Langfuse
 4. 搭建 Dashboard 监控关键指标
 
-下一课：调用链路追踪——从用户输入到模型输出的全链路可视化。
+---
+
+**下一课**: [03 调用链路追踪——从用户输入到模型输出的全链路可视化](./03-调用链路追踪.md)
 ```
 
 ---

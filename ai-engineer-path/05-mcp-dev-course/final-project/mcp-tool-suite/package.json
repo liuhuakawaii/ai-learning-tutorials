@@ -1,0 +1,21 @@
+{
+  "name": "mcp-tool-suite",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "check": "node scripts/check.cjs",
+    "build": "tsc",
+    "start:db": "node dist/db-server/index.js",
+    "start:api": "node dist/api-server/index.js",
+    "start:fs": "node dist/fs-server/index.js",
+    "inspector": "npx @modelcontextprotocol/inspector node dist/db-server/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

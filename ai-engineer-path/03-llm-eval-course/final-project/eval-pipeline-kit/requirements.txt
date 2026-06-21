@@ -1,0 +1,5 @@
+deepeval>=1.0.0
+ragas>=0.1.0
+pandas>=2.0.0
+streamlit>=1.30.0
+jsonschema>=4.0.0

@@ -152,7 +152,9 @@ def compare_lora_qlora():
 3. 效果接近 LoRA，差距很小
 4. 适合消费级硬件
 
-下一课：训练超参数——Learning Rate / Epoch / Batch Size / LoRA Rank 调优。
+---
+
+**下一课**: [04 训练超参数——Learning Rate / Epoch / Batch Size / LoRA Rank 调优](./04-训练超参数.md)
 ```
 
 ---

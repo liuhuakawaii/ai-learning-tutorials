@@ -158,7 +158,9 @@ class PromptVersionManager:
 3. 集中管理、复用、版本控制
 4. 用 @server.prompt() 装饰器注册
 
-下一课：多原语组合——一个 Server 同时提供 Tool + Resource + Prompt。
+---
+
+**下一课**: [04 多原语组合——一个 Server 同时提供 Tool + Resource + Prompt](./04-多原语组合.md)
 ```
 
 ---

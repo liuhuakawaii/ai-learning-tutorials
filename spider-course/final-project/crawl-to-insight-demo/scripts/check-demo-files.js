@@ -4,9 +4,12 @@ const path = require('path');
 const required = [
   'README.md',
   'package.json',
+  'requirements.txt',
   'fixtures/page-1.html',
   'fixtures/page-2.html',
   'scripts/crawl-fixtures.js',
+  'scripts/crawl_playwright.py',
+  'scripts/books_spider.py',
   'reports/stage2-static-crawl.md',
   'reports/stage4-scrapy-plan.md',
   'reports/stage5-compliance.md'

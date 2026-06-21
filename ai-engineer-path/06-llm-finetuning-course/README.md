@@ -2,6 +2,12 @@
 
 > 从 API 调用者变成模型驾驭者，掌握本地部署和微调开源大模型的完整技能
 
+## 前置要求
+
+- **必修前置**：[01-ai-app-course](../01-ai-app-course/)
+- **技术基础**：Python 3.12，了解 PyTorch 基础
+- **硬件要求**：NVIDIA GPU（最低 8GB VRAM）或 Apple Silicon Mac（16GB+ 内存）
+
 ## 适合谁
 
 - 一直用 API 调用大模型、想了解模型底层原理的开发者

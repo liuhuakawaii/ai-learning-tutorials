@@ -158,7 +158,9 @@ class MCPClient:
 3. 核心功能：初始化、工具列表、工具调用
 4. 要处理连接错误和调用错误
 
-下一课：Agent 集成——将 MCP Tool 接入 LangGraph / OpenAI Agents SDK。
+---
+
+**下一课**: [02 Agent 集成——将 MCP Tool 接入 LangGraph / OpenAI Agents SDK](./02-Agent集成.md)
 ```
 
 ---

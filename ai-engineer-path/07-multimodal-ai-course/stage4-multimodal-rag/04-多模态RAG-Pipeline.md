@@ -164,7 +164,9 @@ def evaluate_multimodal_rag(rag: MultimodalRAG, test_cases: list) -> dict:
 3. 用 GPT-4o 生成图文回答
 4. 优化策略：检索、上下文、生成
 
-下一课：评估多模态 RAG——多模态场景下的评估指标与方法。
+---
+
+**下一课**: [05 评估多模态 RAG——多模态场景下的评估指标与方法](./05-评估多模态RAG.md)
 ```
 
 ---

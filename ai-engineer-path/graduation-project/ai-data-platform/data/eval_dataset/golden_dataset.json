@@ -1,0 +1,14 @@
+[
+  {
+    "query": "各部门的预算和人数是多少？",
+    "expected_sql": "SELECT d.name, d.budget, COUNT(e.id) FROM departments d LEFT JOIN employees e ON d.id = e.department_id GROUP BY d.id",
+    "analysis_criteria": ["部门", "预算", "人数"],
+    "report_criteria": ["摘要", "分析", "结论"]
+  },
+  {
+    "query": "各地区的销售情况",
+    "expected_sql": "SELECT region, SUM(amount), SUM(quantity) FROM sales GROUP BY region",
+    "analysis_criteria": ["地区", "销售额", "趋势"],
+    "report_criteria": ["摘要", "数据", "建议"]
+  }
+]

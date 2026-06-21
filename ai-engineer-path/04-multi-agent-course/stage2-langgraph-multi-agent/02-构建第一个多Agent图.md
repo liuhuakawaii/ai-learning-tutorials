@@ -196,7 +196,9 @@ print(result["results"].get("report", "无结果"))
 3. 用条件边实现动态路由
 4. 状态在节点间流转，累积结果
 
-下一课：子图与嵌套——让 Agent 自身也是一个 LangGraph 图。
+---
+
+**下一课**: [子图与嵌套——让 Agent 自身也是一个 LangGraph 图](./03-子图与嵌套.md)
 ```
 
 ---

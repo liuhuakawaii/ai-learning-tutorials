@@ -111,7 +111,9 @@ class APIResource:
 3. 支持订阅资源变更
 4. 可以适配多种数据源
 
-下一课：Prompt Template——在 Server 端管理可复用的 Prompt 模板。
+---
+
+**下一课**: [03 Prompt Template——在 Server 端管理可复用的 Prompt 模板](./03-Prompt-Template.md)
 ```
 
 ---

@@ -1,0 +1,17 @@
+[
+  {
+    "title": "2025 年 AI Agent 发展趋势",
+    "snippet": "AI Agent 从单一工具调用发展到多 Agent 协作，LangGraph 和 CrewAI 成为主流框架。",
+    "url": "https://example.com/agent-trends"
+  },
+  {
+    "title": "MCP 协议生态现状",
+    "snippet": "Model Context Protocol 已被多家 AI 公司采纳，成为工具调用的事实标准。",
+    "url": "https://example.com/mcp-ecosystem"
+  },
+  {
+    "title": "RAG 技术最新进展",
+    "snippet": "GraphRAG、多模态 RAG、Agentic RAG 等新范式不断涌现。",
+    "url": "https://example.com/rag-progress"
+  }
+]
