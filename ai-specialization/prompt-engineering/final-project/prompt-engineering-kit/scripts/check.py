@@ -127,7 +127,7 @@ def check_testing() -> None:
         eval_result = evaluator.evaluate("hello", "hello")
         check("评估器精确匹配", eval_result.passed)
 
-        eval_result = evaluator.evaluate("hello world", "hello", {"match_type": "contains"})
+        eval_result = evaluator.evaluate("hello", "hello world", {"match_type": "contains"})
         check("评估器包含匹配", eval_result.passed)
 
         reporter = Reporter(output_dir=ROOT / "reports")

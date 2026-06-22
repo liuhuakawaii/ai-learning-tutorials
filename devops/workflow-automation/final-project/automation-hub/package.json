@@ -1,0 +1,8 @@
+{
+  "name": "automation-hub",
+  "version": "1.0.0",
+  "description": "Enterprise Automation Hub - n8n 工作流模板和部署配置",
+  "scripts": {
+    "check": "node scripts/check.cjs"
+  }
+}

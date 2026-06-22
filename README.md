@@ -4,7 +4,7 @@
 
 ## 简介
 
-这个仓库存放了我利用 AI 生成的各类技术学习教程。课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时），以及多门基础技能和工程实践课程，共 **27 门课程、883 课时**。所有重点课程都配有贯穿式 final project / project kit，方便边学边验证。
+这个仓库存放了我利用 AI 生成的各类技术学习教程。课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时），以及多门基础技能和工程实践课程，共 **35 门课程、1123 课时**。所有重点课程都配有贯穿式 final project / project kit，方便边学边验证。
 
 ## 目录结构
 
@@ -31,21 +31,30 @@ ai-learning-tutorials/
 │   ├── nextjs-fullstack/              # Next.js 全栈产品（35课时）
 │   ├── frontend-performance/          # 前端性能工程（35课时）
 │   ├── graphics-shader/               # 3D 图形学与 Shader（47课时）
-│   └── react-native/                  # React Native 移动端（30课时）
+│   ├── react-native/                  # React Native 移动端（30课时）
+│   ├── webassembly/                   # WebAssembly 高性能 Web 开发（30课时）
+│   ├── browser-extension/             # 浏览器扩展开发（30课时）
+│   ├── audio-video-engineering/       # 音视频工程（30课时）
+│   └── motion-design/                 # 技术动画与动效（30课时）
 │
 ├── backend/                           # 后端方向
 │   ├── nodejs-backend/                # 全栈后端开发（32课时）
 │   ├── typescript-engineering/        # TypeScript 工程化（30课时）
-│   └── python-spider/                 # Python 爬虫（34课时）
+│   ├── python-spider/                 # Python 爬虫（34课时）
+│   └── python-automation/             # Python 自动化脚本（30课时）
 │
 ├── devops/                            # 工程与运维
 │   ├── docker-cicd/                   # Docker 与 CI/CD（35课时）
 │   ├── kubernetes-cloud/              # 云原生与 Kubernetes（30课时）
 │   ├── testing-qa/                    # 测试与质量保障（30课时）
-│   └── system-design/                 # 系统设计与架构（30课时）
+│   ├── system-design/                 # 系统设计与架构（30课时）
+│   ├── lowcode-platform/              # 低代码/无代码平台（30课时）
+│   ├── workflow-automation/           # 自动化工作流（30课时）
+│   └── engineering-leadership/        # 工程管理与技术领导力（30课时）
 │
 ├── data/                              # 数据方向
-│   └── data-product/                  # 数据产品化（35课时）
+│   ├── data-product/                  # 数据产品化（35课时）
+│   └── search-engine/                 # 搜索引擎工程（30课时）
 │
 ├── README.md
 ├── AGENTS.md
@@ -87,6 +96,11 @@ ai-learning-tutorials/
 | [frontend-performance](./frontend/frontend-performance/) | 前端性能工程 | Core Web Vitals + React/Next 优化 + 性能监控，35 课时 | 已完成 |
 | [graphics-shader](./frontend/graphics-shader/) | 3D 图形学与 Shader | WebGL / Three.js / GLSL / 创意编码，47 课时 | 已完成 |
 | [react-native](./frontend/react-native/) | React Native 移动端 | Expo / 导航 / 原生模块 / AI 集成 / 发布增长，30 课时 | 已完成 |
+| [ar-vr-xr](./frontend/ar-vr-xr/) | AR/VR/XR 空间计算 | WebXR / Three.js / AR 开发 / VR 开发 / 空间应用，30 课时 | 已完成 |
+| [webassembly](./frontend/webassembly/) | WebAssembly 高性能 Web 开发 | Rust + WASM / SIMD / 多线程 / WASI / 组件模型，30 课时 | 已完成 |
+| [motion-design](./frontend/motion-design/) | 技术动画与动效 | CSS 动画 / GSAP / Three.js / 粒子系统 / 性能优化，30 课时 | 已完成 |
+| [browser-extension](./frontend/browser-extension/) | 浏览器扩展开发 | Manifest V3 / AI 扩展 / 跨浏览器 / 商业化，30 课时 | 已完成 |
+| [audio-video-engineering](./frontend/audio-video-engineering/) | 音视频工程 | Web Audio / 视频处理 / 流媒体 / WebRTC / 生产级应用，30 课时 | 已完成 |
 
 ### 后端方向
 
@@ -95,6 +109,7 @@ ai-learning-tutorials/
 | [nodejs-backend](./backend/nodejs-backend/) | 全栈后端开发 | Node.js + Express + PostgreSQL + Docker，32 课时 | 已完成 |
 | [typescript-engineering](./backend/typescript-engineering/) | TypeScript 工程化 | 类型系统 / 设计模式 / Monorepo / 测试体系 / 生产架构，30 课时 | 已完成 |
 | [python-spider](./backend/python-spider/) | Python 爬虫 | Python + requests + Playwright + Scrapy，34 课时 | 已完成 |
+| [python-automation](./backend/python-automation/) | Python 自动化脚本 | 文件处理 + Web 自动化 + 系统监控 + 真实项目，30 课时 | 已完成 |
 
 ### 工程与运维
 
@@ -104,12 +119,16 @@ ai-learning-tutorials/
 | [kubernetes-cloud](./devops/kubernetes-cloud/) | 云原生与 Kubernetes | 容器编排 / Helm / GitOps / 可观测性 / Service Mesh，30 课时 | 已完成 |
 | [testing-qa](./devops/testing-qa/) | 测试与质量保障 | Vitest / Playwright / Mock / 覆盖率 / 变异测试 / CI 流水线，30 课时 | 已完成 |
 | [system-design](./devops/system-design/) | 系统设计与架构 | 需求分析 / 数据库选型 / 分布式系统 / 微服务 / 真实案例，30 课时 | 已完成 |
+| [workflow-automation](./devops/workflow-automation/) | 自动化工作流 | n8n / AI 工作流 / 企业集成 / 监控告警 / 规模化部署，30 课时 | 已完成 |
+| [lowcode-platform](./devops/lowcode-platform/) | 低代码/无代码平台 | 数据建模 / 应用搭建 / AI 集成 / 自定义组件 / 企业级部署，30 课时 | 已完成 |
+| [engineering-leadership](./devops/engineering-leadership/) | 工程管理与技术领导力 | 管理转型 / 团队建设 / 技术战略 / 执行交付 / 职业成长，30 课时 | 已完成 |
 
 ### 数据方向
 
 | 课程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
 | [data-product](./data/data-product/) | 数据产品化 | ETL + FastAPI + Dashboard + 自动化数据产品，35 课时 | 已完成 |
+| [search-engine](./data/search-engine/) | 搜索引擎工程 | 倒排索引 / BM25 / 向量检索 / Elasticsearch / LTR，30 课时 | 已完成 |
 
 ## 特点
 

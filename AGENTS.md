@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-AI 生成的系统化学习教程合集，面向已有前端基础的学习者，涵盖后端、爬虫、AI 应用、性能工程、部署等方向。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时）以及多门基础技能和工程实践课程，共 **27 门课程、883 课时**。
+AI 生成的系统化学习教程合集，面向已有前端基础的学习者，涵盖后端、爬虫、AI 应用、性能工程、部署等方向。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时）以及多门基础技能和工程实践课程，共 **35 门课程、1123 课时**。
 
 ## 技术栈
 
@@ -34,18 +34,28 @@ ai-learning-tutorials/
 │   ├── nextjs-fullstack/          # Next.js 全栈产品（35 课时）
 │   ├── frontend-performance/      # 前端性能工程（35 课时）
 │   ├── graphics-shader/           # 3D 图形学与 Shader（47 课时）
-│   └── react-native/              # React Native 移动端（30 课时）
+│   ├── react-native/              # React Native 移动端（30 课时）
+│   ├── webassembly/               # WebAssembly 高性能 Web 开发（30 课时）
+│   ├── ar-vr-xr/                  # AR/VR/XR 空间计算开发（30 课时）
+│   ├── browser-extension/         # 浏览器扩展开发（30 课时）
+│   ├── audio-video-engineering/   # 音视频工程（30 课时）
+│   └── motion-design/             # 技术动画与动效（30 课时）
 ├── backend/                       # 后端方向
 │   ├── nodejs-backend/            # 全栈后端开发（32 课时）
 │   ├── typescript-engineering/    # TypeScript 工程化（30 课时）
-│   └── python-spider/             # Python 爬虫（34 课时）
+│   ├── python-spider/             # Python 爬虫（34 课时）
+│   └── python-automation/         # Python 自动化脚本（30 课时）
 ├── devops/                        # 工程与运维
 │   ├── docker-cicd/               # Docker 与 CI/CD（35 课时）
 │   ├── kubernetes-cloud/          # 云原生与 Kubernetes（30 课时）
 │   ├── testing-qa/                # 测试与质量保障（30 课时）
-│   └── system-design/             # 系统设计与架构（30 课时）
+│   ├── system-design/             # 系统设计与架构（30 课时）
+│   ├── workflow-automation/       # 自动化工作流（30 课时）
+│   ├── lowcode-platform/          # 低代码/无代码平台（30 课时）
+│   └── engineering-leadership/    # 工程管理与技术领导力（30 课时）
 ├── data/                          # 数据方向
-│   └── data-product/              # 数据产品化（35 课时）
+│   ├── data-product/              # 数据产品化（35 课时）
+│   └── search-engine/             # 搜索引擎工程（30 课时）
 ├── README.md
 ├── AGENTS.md
 └── COURSE_DESIGN_REVIEW.md
@@ -91,6 +101,10 @@ npm run eval
 # 验证前端性能 demo
 cd frontend/frontend-performance/final-project/performance-rescue-demo
 node scripts/check-demo-files.js
+
+# 验证 WebAssembly 毕业项目
+cd frontend/webassembly/final-project
+node scripts/check.cjs
 ```
 
 ## ⚠️ 关键规则：每次更新后必须同步 README.md

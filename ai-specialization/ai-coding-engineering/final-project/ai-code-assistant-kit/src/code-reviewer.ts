@@ -1,16 +1,28 @@
+/** 代码审查问题 */
 export interface ReviewIssue {
+  /** 行号 */
   line: number;
+  /** 严重程度 */
   severity: 'error' | 'warning' | 'info';
+  /** 问题类别 */
   category: string;
+  /** 问题描述 */
   message: string;
+  /** 修复建议 */
   suggestion?: string;
 }
 
+/** 代码审查报告 */
 export interface ReviewReport {
+  /** 文件名 */
   file: string;
+  /** 审查摘要 */
   summary: string;
+  /** 质量评分 */
   score: number;
+  /** 问题列表 */
   issues: ReviewIssue[];
+  /** 检查时间 */
   checkedAt: string;
 }
 

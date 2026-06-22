@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>创意动效作品集</title>
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <!-- 导航栏 -->
+  <nav class="nav" id="nav">
+    <a href="#hero" class="nav__logo">Portfolio</a>
+    <ul class="nav__links">
+      <li><a href="#hero">首页</a></li>
+      <li><a href="#works">作品</a></li>
+      <li><a href="#about">关于</a></li>
+      <li><a href="#contact">联系</a></li>
+    </ul>
+  </nav>
+
+  <!-- Hero 区域：品牌动画 + 粒子背景 -->
+  <section class="hero" id="hero">
+    <canvas id="particle-canvas"></canvas>
+    <div class="hero__content">
+      <h1 class="hero__title" id="hero-title">
+        <span class="hero__title-line">创意</span>
+        <span class="hero__title-line">动效</span>
+        <span class="hero__title-line">作品集</span>
+      </h1>
+      <p class="hero__subtitle" id="hero-subtitle">用代码编织视觉体验</p>
+      <div class="hero__cta">
+        <button class="btn btn--primary" id="cta-btn">查看作品</button>
+      </div>
+    </div>
+    <div class="scroll-indicator" id="scroll-indicator">
+      <span>向下滚动</span>
+      <div class="scroll-indicator__arrow"></div>
+    </div>
+  </section>
+
+  <!-- 作品展示区：网格布局 + 悬浮交互 -->
+  <section class="works" id="works">
+    <h2 class="section-title">作品展示</h2>
+    <div class="works__grid">
+      <div class="work-card" data-index="0">
+        <div class="work-card__image">
+          <div class="work-card__placeholder" style="--hue: 200"></div>
+        </div>
+        <div class="work-card__info">
+          <h3>数据可视化大屏</h3>
+          <p>Three.js + D3.js</p>
+        </div>
+      </div>
+      <div class="work-card" data-index="1">
+        <div class="work-card__image">
+          <div class="work-card__placeholder" style="--hue: 280"></div>
+        </div>
+        <div class="work-card__info">
+          <h3>交互动画原型</h3>
+          <p>GSAP + Canvas</p>
+        </div>
+      </div>
+      <div class="work-card" data-index="2">
+        <div class="work-card__image">
+          <div class="work-card__placeholder" style="--hue: 340"></div>
+        </div>
+        <div class="work-card__info">
+          <h3>品牌官网设计</h3>
+          <p>CSS 动画 + WebGL</p>
+        </div>
+      </div>
+      <div class="work-card" data-index="3">
+        <div class="work-card__image">
+          <div class="work-card__placeholder" style="--hue: 45"></div>
+        </div>
+        <div class="work-card__info">
+          <h3>移动端微交互</h3>
+          <p>Web Animations API</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 关于页面：时间轴动画 + 3D 场景 -->
+  <section class="about" id="about">
+    <h2 class="section-title">关于我</h2>
+    <div class="about__container">
+      <div class="about__timeline">
+        <div class="timeline-item">
+          <div class="timeline-item__dot"></div>
+          <div class="timeline-item__content">
+            <h3>2020</h3>
+            <p>开始学习前端开发，沉迷于 CSS 动画的魅力</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-item__dot"></div>
+          <div class="timeline-item__content">
+            <h3>2021</h3>
+            <p>深入 GSAP 生态，掌握复杂时间线编排</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-item__dot"></div>
+          <div class="timeline-item__content">
+            <h3>2022</h3>
+            <p>探索 Three.js 与 WebGL，开拓 3D 动效领域</p>
+          </div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-item__dot"></div>
+          <div class="timeline-item__content">
+            <h3>2023</h3>
+            <p>承接商业项目，将动效融入产品设计</p>
+          </div>
+        </div>
+      </div>
+      <div class="about__3d" id="three-container"></div>
+    </div>
+  </section>
+
+  <!-- 联系页：表单交互动效 -->
+  <section class="contact" id="contact">
+    <h2 class="section-title">联系我</h2>
+    <form class="contact__form" id="contact-form">
+      <div class="form-group">
+        <input type="text" id="name" required placeholder=" " />
+        <label for="name">姓名</label>
+        <div class="form-group__line"></div>
+      </div>
+      <div class="form-group">
+        <input type="email" id="email" required placeholder=" " />
+        <label for="email">邮箱</label>
+        <div class="form-group__line"></div>
+      </div>
+      <div class="form-group">
+        <textarea id="message" rows="4" required placeholder=" "></textarea>
+        <label for="message">留言</label>
+        <div class="form-group__line"></div>
+      </div>
+      <button type="submit" class="btn btn--primary btn--submit">发送消息</button>
+    </form>
+  </section>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

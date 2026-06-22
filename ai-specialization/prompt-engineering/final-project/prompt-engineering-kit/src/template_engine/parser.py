@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from jinja2 import Environment, BaseLoader, TemplateSyntaxError, UndefinedError
+from jinja2 import Environment, BaseLoader, TemplateSyntaxError, UndefinedError, Undefined
 
 
 @dataclass
@@ -32,7 +32,7 @@ class PromptParser:
     def __init__(self) -> None:
         self._env = Environment(
             loader=BaseLoader(),
-            undefined=UndefinedError,
+            undefined=Undefined,
             trim_blocks=True,
             lstrip_blocks=True,
         )

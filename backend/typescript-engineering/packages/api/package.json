@@ -1,0 +1,29 @@
+{
+  "name": "@ts-tool-platform/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "平台 API 服务",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ts-tool-platform/shared-types": "workspace:*",
+    "@ts-tool-platform/config": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0",
+    "tsx": "^4.7.0"
+  }
+}

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 阅读助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">AI 阅读助手</h1>
+      <div class="header-actions">
+        <button id="btn-settings" class="icon-btn" title="设置">&#9881;</button>
+      </div>
+    </header>
+
+    <!-- 功能导航 -->
+    <nav class="nav-tabs">
+      <button class="tab active" data-tab="summary">摘要</button>
+      <button class="tab" data-tab="translate">翻译</button>
+      <button class="tab" data-tab="notes">笔记</button>
+      <button class="tab" data-tab="reader">阅读</button>
+    </nav>
+
+    <!-- 摘要面板 -->
+    <section id="panel-summary" class="panel active">
+      <div class="panel-header">
+        <select id="summary-style" class="select">
+          <option value="brief">简洁摘要</option>
+          <option value="detailed">详细摘要</option>
+          <option value="bullets">要点提取</option>
+        </select>
+        <button id="btn-summarize" class="btn btn-primary">生成摘要</button>
+      </div>
+      <div id="summary-result" class="result-area">
+        <p class="placeholder">点击"生成摘要"提取当前页面的核心内容</p>
+      </div>
+    </section>
+
+    <!-- 翻译面板 -->
+    <section id="panel-translate" class="panel">
+      <div class="panel-header">
+        <select id="target-lang" class="select">
+          <option value="zh">中文</option>
+          <option value="en">English</option>
+          <option value="ja">日本語</option>
+          <option value="ko">한국어</option>
+        </select>
+      </div>
+      <div id="translate-result" class="result-area">
+        <p class="placeholder">选中网页中的文本，翻译结果将在此显示</p>
+      </div>
+    </section>
+
+    <!-- 笔记面板 -->
+    <section id="panel-notes" class="panel">
+      <div class="note-input-area">
+        <textarea id="note-input" class="textarea" placeholder="记录你的阅读想法..." rows="3"></textarea>
+        <button id="btn-add-note" class="btn btn-primary btn-sm">添加笔记</button>
+      </div>
+      <div id="notes-list" class="notes-list">
+        <p class="placeholder">暂无笔记</p>
+      </div>
+    </section>
+
+    <!-- 阅读模式面板 -->
+    <section id="panel-reader" class="panel">
+      <div class="panel-header">
+        <button id="btn-reader-mode" class="btn btn-primary">进入阅读模式</button>
+        <button id="btn-font-size" class="btn btn-secondary btn-sm">A+</button>
+      </div>
+      <div id="reader-stats" class="stats-area">
+        <div class="stat-item">
+          <span class="stat-label">阅读时间</span>
+          <span id="reading-time" class="stat-value">--</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">字数</span>
+          <span id="word-count" class="stat-value">--</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- API Key 设置区域（默认隐藏） -->
+    <section id="settings-panel" class="settings-panel hidden">
+      <div class="setting-item">
+        <label for="api-key">API Key</label>
+        <input id="api-key" type="password" class="input" placeholder="输入你的 OpenAI API Key">
+      </div>
+      <div class="setting-item">
+        <label for="api-endpoint">API 地址</label>
+        <input id="api-endpoint" type="text" class="input" placeholder="https://api.openai.com/v1">
+      </div>
+      <div class="setting-actions">
+        <button id="btn-save-settings" class="btn btn-primary btn-sm">保存</button>
+        <button id="btn-cancel-settings" class="btn btn-secondary btn-sm">取消</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

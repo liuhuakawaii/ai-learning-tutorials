@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在线视频平台 - 音视频工程毕业项目</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e1e1e1;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1a2e;
+      padding: 16px 24px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    header h1 span {
+      color: #ff4757;
+    }
+
+    nav {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+    }
+
+    nav button {
+      background: transparent;
+      border: 1px solid #444;
+      color: #ccc;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    nav button:hover, nav button.active {
+      background: #ff4757;
+      border-color: #ff4757;
+      color: #fff;
+    }
+
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .module {
+      display: none;
+    }
+
+    .module.active {
+      display: block;
+    }
+
+    .module-title {
+      font-size: 24px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #ff4757;
+    }
+
+    .card {
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid #333;
+    }
+
+    .card h3 {
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    /* 上传区域 */
+    .upload-zone {
+      border: 2px dashed #444;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #ff4757;
+      background: rgba(255, 71, 87, 0.05);
+    }
+
+    .upload-zone input[type="file"] {
+      display: none;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+
+    .progress-bar .fill {
+      height: 100%;
+      background: #ff4757;
+      border-radius: 3px;
+      transition: width 0.3s;
+      width: 0%;
+    }
+
+    /* 视频列表 */
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .video-card {
+      background: #222;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .video-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .video-card .thumb {
+      height: 160px;
+      background: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+    }
+
+    .video-card .info {
+      padding: 12px;
+    }
+
+    .video-card .info h4 {
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .video-card .info small {
+      color: #888;
+    }
+
+    /* 响应式 */
+    @media (max-width: 768px) {
+      header {
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      nav {
+        margin-left: 0;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .video-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>🎬</span> 在线视频平台</h1>
+    <nav>
+      <button class="active" data-module="player">视频播放</button>
+      <button data-module="recorder">音频录制</button>
+      <button data-module="streaming">HLS 流媒体</button>
+      <button data-module="chat">视频通话</button>
+      <button data-module="upload">视频上传</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 视频播放模块 -->
+    <div id="module-player" class="module active">
+      <h2 class="module-title">视频播放器</h2>
+      <div id="video-player-container"></div>
+    </div>
+
+    <!-- 音频录制模块 -->
+    <div id="module-recorder" class="module">
+      <h2 class="module-title">音频录制</h2>
+      <div id="audio-recorder-container"></div>
+    </div>
+
+    <!-- HLS 流媒体模块 -->
+    <div id="module-streaming" class="module">
+      <h2 class="module-title">HLS 自适应流媒体</h2>
+      <div id="hls-player-container"></div>
+    </div>
+
+    <!-- 视频通话模块 -->
+    <div id="module-chat" class="module">
+      <h2 class="module-title">WebRTC 视频通话</h2>
+      <div id="video-chat-container"></div>
+    </div>
+
+    <!-- 上传模块 -->
+    <div id="module-upload" class="module">
+      <h2 class="module-title">视频上传</h2>
+      <div class="card">
+        <div class="upload-zone" id="upload-zone">
+          <p style="font-size: 48px; margin-bottom: 12px;">📁</p>
+          <p>拖拽视频文件到此处，或点击选择</p>
+          <p style="color: #888; margin-top: 8px;">支持 MP4、WebM、OGG 格式</p>
+          <input type="file" id="file-input" accept="video/*">
+        </div>
+        <div class="progress-bar" id="upload-progress" style="display: none;">
+          <div class="fill" id="progress-fill"></div>
+        </div>
+        <p id="upload-status" style="margin-top: 12px; color: #888;"></p>
+      </div>
+      <div class="card">
+        <h3>已上传视频</h3>
+        <div class="video-grid" id="video-list"></div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

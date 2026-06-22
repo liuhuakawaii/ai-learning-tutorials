@@ -1,0 +1,82 @@
+# 低代码平台前端 Dockerfile
+# 多阶段构建：先编译前端资源，再以 Nginx 提供服务
+
+# ===== 第一阶段：构建 =====
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# 安装 pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# 复制依赖定义文件
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY packages/client/package.json ./packages/client/
+COPY packages/components/package.json ./packages/components/ 2>/dev/null || true
+
+# 安装依赖
+RUN pnpm install --frozen-lockfile
+
+# 复制源代码
+COPY packages/client/ ./packages/client/
+COPY packages/components/ ./packages/components/
+
+# 编译前端资源
+RUN cd packages/client && pnpm run build
+
+# ===== 第二阶段：Nginx 静态服务 =====
+FROM nginx:alpine AS runner
+
+# 复制自定义 Nginx 配置
+RUN cat > /etc/nginx/conf.d/default.conf << 'EOF'
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # 前端路由支持（SPA History 模式）
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # API 反向代理到后端服务
+    location /api/ {
+        proxy_pass http://server:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # 静态资源缓存策略
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # 健康检查端点
+    location /health {
+        access_log off;
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+
+# 复制构建产物
+COPY --from=builder /app/packages/client/dist /usr/share/nginx/html
+
+# 设置文件权限
+RUN chown -R nginx:nginx /usr/share/nginx/html
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

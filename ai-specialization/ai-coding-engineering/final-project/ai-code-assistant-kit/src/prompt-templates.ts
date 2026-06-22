@@ -1,7 +1,12 @@
+/** Prompt 模板定义接口 */
 export interface PromptTemplate {
+  /** 模板名称 */
   name: string;
+  /** 模板描述 */
   description: string;
+  /** 使用场景 */
   scenario: string;
+  /** 模板内容 */
   content: string;
 }
 

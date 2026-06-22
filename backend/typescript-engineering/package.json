@@ -1,0 +1,21 @@
+{
+  "name": "ts-tool-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TypeScript 工程化实战平台 — Turborepo 多包 monorepo",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

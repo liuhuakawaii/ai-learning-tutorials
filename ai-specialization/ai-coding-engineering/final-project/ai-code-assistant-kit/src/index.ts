@@ -19,7 +19,7 @@ program
   .action(() => {
     const templates = listTemplates();
     console.log('\n可用 Prompt 模板：\n');
-    templates.forEach((t, i) => {
+    templates.forEach((t: { name: string; description: string; scenario: string }, i: number) => {
       console.log(`  ${i + 1}. ${t.name}`);
       console.log(`     ${t.description}`);
       console.log(`     场景: ${t.scenario}\n`);
@@ -67,7 +67,7 @@ program
     console.log('\n代码审查报告：\n');
     console.log(report.summary);
     console.log(`\n发现 ${report.issues.length} 个问题：\n`);
-    report.issues.forEach((issue, i) => {
+    report.issues.forEach((issue: { severity: string; line: number; message: string }, i: number) => {
       const icon = issue.severity === 'error' ? '❌' : issue.severity === 'warning' ? '⚠️' : 'ℹ️';
       console.log(`  ${icon} [${issue.severity.toUpperCase()}] 第${issue.line}行: ${issue.message}`);
     });

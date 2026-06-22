@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "AI 阅读助手",
+  "version": "1.0.0",
+  "description": "让网页阅读效率提升 10 倍的智能工具——支持 AI 摘要、划词翻译、阅读笔记和阅读模式",
+
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "sidePanel"
+  ],
+
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content.js"],
+      "css": [],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "side_panel": {
+    "default_path": "popup/popup.html"
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

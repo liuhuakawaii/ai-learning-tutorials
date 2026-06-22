@@ -1,11 +1,24 @@
+/** 函数信息接口 */
 interface FunctionInfo {
+  /** 函数名 */
   name: string;
+  /** 参数列表 */
   params: string[];
+  /** 返回类型 */
   returnType: string;
+  /** 是否异步 */
   isAsync: boolean;
+  /** 是否导出 */
   isExport: boolean;
 }
 
+/**
+ * 根据源代码生成测试用例
+ * @param sourceCode - 源代码字符串
+ * @param fileName - 文件名
+ * @param framework - 测试框架 (vitest/jest/pytest)
+ * @returns 生成的测试代码
+ */
 export function generateTests(sourceCode: string, fileName: string, framework: string = 'vitest'): string {
   const functions = extractFunctions(sourceCode);
   const isTypeScript = fileName.endsWith('.ts') || fileName.endsWith('.tsx');

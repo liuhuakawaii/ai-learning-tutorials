@@ -90,10 +90,16 @@ def main():
         "pydantic",
         "qdrant_client",
         "redis",
-        "ragas",
     ]
+    optional_packages = ["ragas"]
     for pkg in core_packages:
         results.append(check_package(pkg))
+    for pkg in optional_packages:
+        try:
+            importlib.import_module(pkg)
+            print(f"[OK] {pkg} (optional)")
+        except ImportError:
+            print(f"[SKIP] {pkg} 未安装（可选依赖）")
 
     # 环境变量
     print("\n[环境变量]")

@@ -5,17 +5,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from jinja2 import Environment, BaseLoader, Undefined, TemplateError
+from jinja2 import Environment, BaseLoader, Undefined, StrictUndefined, TemplateError
+from jinja2.exceptions import UndefinedError as JinjaUndefinedError
 
 
 class _StrictUndefined(Undefined):
     """访问未定义变量时抛出明确错误."""
 
     def __str__(self) -> str:
-        raise UndefinedError(f"变量 '{self._undefined_name}' 未定义且无默认值")
+        raise JinjaUndefinedError(f"变量 '{self._undefined_name}' 未定义且无默认值")
 
-    def __getattr__(self, name: str) -> Any:
-        raise UndefinedError(f"变量 '{self._undefined_name}' 未定义且无默认值")
+    def __iter__(self):
+        raise JinjaUndefinedError(f"变量 '{self._undefined_name}' 未定义且无默认值")
+
+    def __bool__(self) -> bool:
+        return False
 
 
 @dataclass
@@ -36,7 +40,7 @@ class PromptRenderer:
 
     def __init__(self, strict: bool = True) -> None:
         self._strict = strict
-        undefined_cls = _StrictUndefined if strict else Undefined
+        undefined_cls = StrictUndefined if strict else Undefined
         self._env = Environment(
             loader=BaseLoader(),
             undefined=undefined_cls,

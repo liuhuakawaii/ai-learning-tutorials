@@ -1,0 +1,51 @@
+# 默认配置
+app:
+  name: "toolbox"
+  version: "1.0.0"
+  log_level: "INFO"
+  log_file: "toolbox.log"
+
+file_ops:
+  supported_extensions:
+    - ".txt"
+    - ".csv"
+    - ".json"
+    - ".xlsx"
+    - ".pdf"
+    - ".jpg"
+    - ".png"
+  organize_rules:
+    documents: [".txt", ".csv", ".json", ".xlsx", ".pdf"]
+    images: [".jpg", ".jpeg", ".png", ".gif", ".bmp"]
+    archives: [".zip", ".tar", ".gz", ".rar"]
+  clean_older_than_days: 30
+
+web_monitor:
+  timeout: 10
+  retry_count: 3
+  user_agent: "Toolbox/1.0"
+  notify:
+    email:
+      smtp_host: "smtp.example.com"
+      smtp_port: 587
+      use_tls: true
+    webhook_url: ""
+
+sys_inspect:
+  cpu_threshold: 80
+  memory_threshold: 85
+  disk_threshold: 90
+  check_interval: 60
+
+report:
+  output_dir: "./output"
+  excel:
+    default_sheet: "数据"
+    max_rows: 10000
+  pdf:
+    page_size: "A4"
+    font_size: 12
+  mailer:
+    smtp_host: "smtp.example.com"
+    smtp_port: 587
+    use_tls: true

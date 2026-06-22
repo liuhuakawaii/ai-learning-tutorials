@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docker-cicd-course/stage1-docker-foundations/03-Dockerfile基础.md",
+                "file": "devops/engineering-leadership/stage2-team-building/02-团队文化.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "03-Dockerfile基础"
+              "title": "02-团队文化"
             }
           }
         ]
@@ -185,11 +185,43 @@
   },
   "active": "124ef896fbd43236",
   "lastOpenFiles": [
-    "docker-cicd-course/stage1-docker-foundations/02-镜像和容器.md",
-    "docker-cicd-course/stage1-docker-foundations/01-为什么需要容器.md",
-    "docker-cicd-course/stage1-docker-foundations/02-镜像容器仓库.md",
-    "docker-cicd-course/stage1-docker-foundations/06-安全基础.md",
-    "docker-cicd-course/stage1-docker-foundations/05-Volume和Network.md",
-    "docker-cicd-course/stage1-docker-foundations/04-构建缓存和多阶段构建.md"
+    "devops/engineering-leadership/stage2-team-building/01-招聘与面试.md",
+    "devops/engineering-leadership/README.md",
+    "devops/testing-qa/README.md",
+    "devops/workflow-automation/README.md",
+    "devops/system-design/README.md",
+    "devops/system-design/final-project/项目说明.md",
+    "frontend/motion-design/stage5-creative-projects/02-页面过渡动画.md",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/template_engine/__pycache__/variables.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/template_engine/__pycache__/renderer.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/template_engine/__pycache__/__init__.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/template_engine/__pycache__/parser.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/template_engine/__pycache__",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/__pycache__/__init__.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/__pycache__",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/monitor/__pycache__/dashboard.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/monitor/__pycache__/tracker.cpython-314.pyc",
+    "ai-specialization/prompt-engineering/final-project/prompt-engineering-kit/src/monitor/__pycache__/__init__.cpython-314.pyc",
+    "frontend/motion-design/stage5-creative-projects/04-生成式艺术.md",
+    "frontend/motion-design/stage3-gsap-masterclass/06-阶段实战-品牌官网动效.md",
+    "frontend/motion-design/stage3-gsap-masterclass/03-GSAP与React.md",
+    "devops/workflow-automation/stage5-enterprise-automation/06-阶段实战-企业自动化平台.md",
+    "devops/workflow-automation/stage5-enterprise-automation/05-规模化部署.md",
+    "devops/workflow-automation/stage1-n8n-foundations/01-自动化工作流思维.md",
+    "devops/lowcode-platform/stage4-custom-components/02-自定义图表组件.md",
+    "devops/lowcode-platform/stage3-ai-lowcode/01-AI辅助建模.md",
+    "devops/lowcode-platform/stage2-app-building/04-报表与导出.md",
+    "devops/lowcode-platform/stage1-lowcode-foundations/05-权限与角色.md",
+    "devops/lowcode-platform/stage1-lowcode-foundations/01-低代码思维.md",
+    "frontend/browser-extension/stage1-extension-fundamentals/01-浏览器扩展是什么.md",
+    "ai-specialization/ai-coding-engineering/final-project/ai-code-assistant-kit/coverage/sort-arrow-sprite.png",
+    "ai-specialization/ai-coding-engineering/final-project/ai-code-assistant-kit/coverage/favicon.png",
+    "frontend/browser-extension/stage5-monetization/02-付费模式.md",
+    "frontend/browser-extension/stage2-advanced-apis/README.md",
+    "frontend/browser-extension/stage2-advanced-apis/05-侧边栏与DevTools.md",
+    "frontend/browser-extension/stage2-advanced-apis/01-存储API.md",
+    "frontend/motion-design/stage1-animation-foundations/02-CSS-Transition与Animation.md",
+    "frontend/motion-design/stage1-animation-foundations/01-动画原理.md",
+    "frontend/motion-design/final-project/项目说明.md"
   ]
 }
