@@ -2,6 +2,12 @@
 
 > 实际项目中，一个 Agent 通常需要连接多个 MCP Server。
 
+## 场景引入
+
+你的 AI Agent 需要同时使用数据库查询、文件读取、Slack 消息发送三个 MCP Server。每个 Server 有自己的 Client，工具名称可能冲突（两个 Server 都有 read_file），调用时要自动路由到正确的 Server。更复杂的是，某个 Server 偶尔会挂掉，你需要故障转移到备用实例。一个 Agent 管理多个 Server，架构该怎么设计？
+
+---
+
 ## 学习目标
 
 - 掌握多 Server 管理的架构设计
@@ -147,12 +153,51 @@ class ToolRouter:
         return None
 ```
 
+## 常见误区
+
+```
+误区 1：工具名冲突就改 Server 代码
+  工具名冲突应该在 Manager 层用命名空间解决（如 db:read_file、fs:read_file）。
+  不要为了兼容而改已有 Server 的工具名。
+
+误区 2：故障转移就是自动重试
+  故障转移是切换到不同的 Server 实例，不是重试同一个实例。
+  重试同一个挂掉的实例只会浪费时间。
+
+误区 3：所有 Server 都需要负载均衡
+  只有无状态的 Server 才适合负载均衡。有状态 Server（如数据库连接）要用会话粘滞。
+  不要盲目对所有 Server 做负载均衡。
+
+误区 4：Server 管理器不需要健康检查
+  没有健康检查，Manager 不知道 Server 已经挂了，会继续路由请求到不可用的 Server。
+  定期探测 Server 状态，标记不健康的 Server。
+```
+
+---
+
+## 工程建议
+
+```
+1. 工具索引用 Server 名称做前缀
+  server_name:tool_name 格式，避免工具名冲突。
+  在 list_all_tools 中返回带前缀的工具名，让 AI 知道工具属于哪个 Server。
+
+2. 健康检查间隔要合理
+  太频繁（每秒）会给 Server 带来压力，太稀疏（每小时）发现不了问题。
+  建议每 30 秒检查一次，连续 3 次失败标记为不健康。
+
+3. 故障转移要有降级方案
+  主 Server 不可用时，先尝试备用 Server。
+  所有 Server 都不可用时，返回缓存数据或友好提示。
+
+4. 优雅下线比强制断开好
+  Server 维护前，先通知 Manager 停止路由新请求。
+  等待进行中的请求完成后再断开连接。
+```
+
 ---
 
 ## 小结
-
-```
-本课核心要点：
 
 1. 多 Server 管理支持分布式工具
 2. 工具索引快速定位工具所在 Server

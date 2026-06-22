@@ -2,6 +2,10 @@
 
 > 前端不是"画页面"——是把复杂的后端能力翻译成人能理解的界面。
 
+## 场景引入
+
+后端 API 已经写好了，现在需要用 Vue 3 搭建前端工程。但企业级前端不是写几个页面那么简单：状态管理怎么做？API 调用怎么封装才优雅？TypeScript 类型怎么和后端对齐？组件库怎么按需导入？路由守卫怎么配置？这些问题处理不好，项目写到一半就会陷入混乱——组件之间传参像蜘蛛网，API 调用散落各处，类型报错满屏飘红。
+
 ## 学习目标
 
 - 搭建 Vue 3 + TypeScript + Naive UI 的企业级前端工程
@@ -545,7 +549,7 @@ function onMenuSelect(key: string) {
 - API 调用封装 + 类型定义 = 前后端协作效率翻倍
 - Naive UI 自动导入让开发体验更流畅
 
-## 常见错误
+## 常见误区
 
 | 错误 | 原因 | 解决 |
 |------|------|------|
@@ -553,3 +557,11 @@ function onMenuSelect(key: string) {
 | 路由守卫不生效 | `meta.requiresAuth` 拼写错误 | 检查路由配置和守卫逻辑 |
 | TypeScript 报错 `any` | 没有定义类型 | 创建 `types/api.ts` 并导入 |
 | 热更新不工作 | Vite 配置错误 | 检查 `vite.config.ts` 的 proxy 配置 |
+
+## 工程建议
+
+- API 调用层要集中管理，不要在组件里直接写 `axios.get`，方便统一处理错误、token、超时
+- Pinia Store 只放全局共享状态，组件局部状态用 `ref`/`reactive` 即可，不要过度使用全局状态
+- TypeScript 的 `strict` 模式建议从项目第一天开启，后期补类型定义成本极高
+- Naive UI 等组件库用自动导入（unplugin-vue-components）减少手动注册的样板代码
+- 前端路由守卫要在项目初期就配好，避免后期遗漏权限检查

@@ -2,6 +2,10 @@
 
 > 生产环境必须用 HTTPS——没有例外。
 
+## 场景引入
+
+你的 AI Agent 平台部署到服务器后，用户反馈浏览器地址栏显示"不安全"，SSE 流式对话也莫名其妙断连。更糟糕的是，有人用抓包工具直接截获了 API 请求中的 Token。没有反向代理和 HTTPS，你的服务就像在公路上裸奔——任何人都能看到传输内容，而且直接暴露后端端口带来严重的安全风险。
+
 ## 学习目标
 
 - 配置 Nginx 反向代理
@@ -91,17 +95,21 @@ yourdomain.com {
 2. 配置自动续期
 3. 测试 SSL 评分
 
-## 本节要点
-
-- Nginx 是最流行的反向代理
-- HTTPS 是生产环境的必需
-- WebSocket/SSE 需要特殊配置
-- Caddy 比 Nginx 更简单（自动 HTTPS）
-
-## 常见错误
+## 常见误区
 
 | 错误 | 原因 | 解决 |
 |------|------|------|
 | SSE 不工作 | Nginx 缓冲了响应 | 配置 proxy_buffering off |
 | WebSocket 断连 | 超时太短 | 增加 proxy_read_timeout |
 | 证书过期 | 没自动续期 | 配置 certbot 自动续期 |
+
+## 工程建议
+
+SSE 流式响应在 Nginx 下必须关闭缓冲（`proxy_buffering off`），否则客户端收不到实时数据块。HTTPS 证书推荐使用 Let's Encrypt 配合 certbot 自动续期，避免人工遗忘导致证书过期。如果团队 Nginx 经验不足，优先考虑 Caddy——它自动管理 HTTPS 证书，配置量只有 Nginx 的三分之一。
+
+## 本节要点
+
+- Nginx 是最流行的反向代理
+- HTTPS 是生产环境的必需
+- WebSocket/SSE 需要特殊配置
+- Caddy 比 Nginx 更简单（自动 HTTPS）

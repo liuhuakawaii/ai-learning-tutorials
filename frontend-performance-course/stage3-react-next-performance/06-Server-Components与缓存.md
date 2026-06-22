@@ -4,6 +4,10 @@
 > **前置知识**：了解 Next.js App Router 和 React 基础
 > **预计时长**：35 分钟
 
+## 场景引入
+
+你的 Next.js 博客文章页面加载时，浏览器要先下载 300KB 的 JS 包（包含 Markdown 解析器、代码高亮库、评论组件），然后执行 JS、请求数据、再渲染。Lighthouse 报告显示 LCP 3.8 秒，其中 2 秒花在 JS 下载和执行上。但仔细一看，文章内容和代码高亮根本不需要交互——它们完全可以放在服务端渲染，客户端只需要下载评论区的 JS。用 Server Components 重构后，客户端 JS 从 300KB 降到 50KB，LCP 从 3.8 秒降到 1.2 秒。
+
 ---
 
 ## 学习目标
@@ -341,6 +345,20 @@ function ProductDetail({ product, addToCart }) {
 ```
 
 ---
+
+## 常见误区
+
+1. **把整个页面标记为 'use client'**：这是最常见的错误。一旦顶层组件标记为 client，其下所有组件都变成客户端组件，即使它们不需要交互。Client 边界应该尽量往下推。
+2. **Server Components 中使用 useState/useEffect**：Server Components 不能用 hooks。如果组件需要状态或副作用，必须标记为 'use client'。
+3. **在 Client Component 中直接获取数据库数据**：Client Component 运行在浏览器中，不能直接访问数据库。数据获取应该在 Server Component 中完成，通过 props 传递给 Client Component。
+4. **滥用 Server Actions 做所有数据变更**：Server Actions 适合表单提交和简单的数据变更。复杂的交互逻辑（拖拽、实时更新）还是应该用客户端状态 + API 路由。
+
+## 工程建议
+
+1. **默认用 Server Component，只在需要时标记 'use client'**：这是 App Router 的设计哲学。需要事件处理、hooks、浏览器 API 时才转为 Client Component。
+2. **用 Promise.all 并行获取多个数据源**：Server Component 可以 await 多个数据请求，避免客户端的瀑布式请求。
+3. **缓存策略按数据更新频率选择**：不常变的数据用默认缓存（构建时渲染），定时变化的数据用 revalidate，实时数据用 no-store。
+4. **用 Suspense 包裹慢数据获取**：如果页面中有一个数据源特别慢，用 Suspense 包裹它，让其他部分先渲染。
 
 ## 动手练习
 

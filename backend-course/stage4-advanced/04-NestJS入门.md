@@ -1,5 +1,9 @@
 # 第四阶段 · 第4课：NestJS 入门
 
+## 场景引入
+
+你的博客 API 用 Express 从零搭建，随着功能增加，代码量膨胀到了 5000+ 行。你开始感到痛苦：业务逻辑和路由混在一起，一个 Controller 文件 300 行；依赖管理靠手动 import，改一个 Service 的构造函数要改十几个文件；没有统一的项目结构，新人看代码一头雾水；中间件缺乏类型安全，参数全靠猜。你需要的不是换一门语言，而是一个有规范、有约束、有最佳实践的框架。NestJS 就是 Node.js 世界的"Spring"——它用模块化架构、依赖注入和装饰器模式，把混乱的 Express 代码变成企业级的工程。本课将带你理解 NestJS 的核心概念，并用它重写博客 API。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -1676,6 +1680,30 @@ export class TransformInterceptor<T> implements NestInterceptor<T, any> {
 //   }
 // }
 ```
+
+---
+
+## 常见误区
+
+1. **在 Controller 中写业务逻辑**：Controller 应该只做三件事——接收请求参数、调用 Service、返回响应。如果 Controller 里有数据库查询、条件判断、数据转换，说明业务逻辑泄露到了 Controller 层。
+
+2. **不用 DTO 验证输入**：直接用 `@Body() body: any` 接收请求体，不做任何验证。客户端可以传任意数据，导致类型错误或安全漏洞。必须用 class-validator 装饰器定义 DTO。
+
+3. **在模块外手动创建 Service 实例**：`const service = new UsersService()` 绕过了依赖注入容器，导致 Service 的依赖不会被自动注入。应该通过构造函数注入，让 NestJS 管理实例的创建和生命周期。
+
+4. **滥用 `@Global()` 模块**：把所有模块都标记为全局模块，导致模块间的依赖关系不清晰。只有真正需要全局共享的服务（如 PrismaService）才用 `@Global()`，其他模块通过 `imports` 明确声明依赖。
+
+---
+
+## 工程建议
+
+1. **一个功能一个模块**：用户模块（UsersModule）、文章模块（PostsModule）、认证模块（AuthModule）各自独立。模块内部的 Controller、Service、DTO 放在同一个目录下，方便查找。
+
+2. **用 `ValidationPipe` 全局启用 DTO 验证**：在 `main.ts` 中 `app.useGlobalPipes(new ValidationPipe({ whitelist: true }))`，所有 DTO 自动验证，未定义的属性自动过滤。
+
+3. **Guard 处理认证，Pipe 处理验证**：不要在 Guard 中做输入验证，也不要在 Pipe 中做权限检查。Guard 的职责是"能不能访问"，Pipe 的职责是"参数对不对"。
+
+4. **自定义装饰器减少重复代码**：`@CurrentUser()` 获取当前用户、`@Roles(Role.ADMIN)` 声明所需角色、`@Pagination()` 解析分页参数。装饰器让代码更简洁、更声明式。
 
 ---
 

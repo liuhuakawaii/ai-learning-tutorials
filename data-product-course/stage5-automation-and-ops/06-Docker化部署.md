@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你的数据产品在本地跑得好好的，Python 3.11、PostgreSQL 15、Redis 7，一切正常。换到服务器上部署，系统自带 Python 3.8，pip 装依赖各种报错，PostgreSQL 版本不兼容，折腾了一天才跑起来。同事说"你为什么不写个 Dockerfile？"你开始意识到：本地能跑不等于能部署，环境一致性是数据产品上线的最后一道坎。
+
+---
+
 ## 学习目标
 
 1. 编写 Dockerfile
@@ -159,6 +165,24 @@ server {
     }
 }
 ```
+
+---
+
+## 常见误区
+
+- **在容器里存持久化数据**：Docker 容器是临时的，重启后数据会丢失。数据库文件、上传的文件必须挂载到 volume 或使用外部存储。
+- **用 `latest` 标签**：`postgres:latest` 在不同时间拉取可能指向不同版本，导致生产环境行为不可预测。始终指定明确版本号。
+- **Dockerfile 里 COPY 整个项目**：每次改一行代码就要重新安装所有依赖。应该先 COPY 依赖文件（`requirements.txt`），安装依赖后再 COPY 代码，利用 Docker 缓存层。
+- **所有服务用同一个 Dockerfile**：API 服务、前端、定时任务的运行环境和资源需求不同，应该各自有独立的 Dockerfile 和服务定义。
+
+---
+
+## 工程建议
+
+1. **docker-compose 分环境管理**：`docker-compose.yml` 放基础配置，`docker-compose.override.yml` 放开发环境覆盖（如挂载代码目录），生产环境用独立的 `docker-compose.prod.yml`。
+2. **健康检查不能少**：在 docker-compose 里为每个服务配置 `healthcheck`，确保依赖服务真正就绪后再启动下游服务。
+3. **日志输出到 stdout/stderr**：不要把日志写到容器内的文件里，统一输出到标准输出，由 Docker 日志驱动收集，方便集中查看和分析。
+4. **镜像瘦身**：使用 `slim` 或 `alpine` 基础镜像，删除构建工具和缓存文件，减小镜像体积，加快部署速度。
 
 ---
 

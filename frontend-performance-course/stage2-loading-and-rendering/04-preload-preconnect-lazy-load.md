@@ -4,6 +4,10 @@
 > **前置知识**：了解 CSS/JS 阻塞机制和关键渲染路径
 > **预计时长**：35 分钟
 
+## 场景引入
+
+你的页面首屏有一张 Hero 图片，但 Network 瀑布图显示它在 2.5 秒后才开始加载——因为浏览器先解析 HTML、再加载 CSS、从 CSS 中发现 background-image 才发起图片请求。你给图片加了 `<link rel="preload">` 和 `fetchpriority="high"`，LCP 从 4 秒降到 1.8 秒。但你又犯了一个错误：给首屏图片也加了 `loading="lazy"`，结果图片反而加载更晚了。资源提示（Resource Hints）是一把双刃剑，用对了事半功倍，用错了适得其反。
+
 ---
 
 ## 学习目标
@@ -185,7 +189,7 @@ function Dashboard() {
 
 ---
 
-## 六、常见错误
+## 六、常见误区
 
 ```
 ❌ 错误 1：preload 所有资源
@@ -232,6 +236,13 @@ function Dashboard() {
 3. 对可选的源添加 dns-prefetch
 
 ---
+
+## 工程建议
+
+1. **用 Lighthouse 的 "Preload key requests" 审计项指导 preload**：不要凭感觉 preload，让 Lighthouse 告诉你哪些资源应该 preload。
+2. **首屏图片用 fetchpriority="high"，非首屏用 loading="lazy"**：这是最简单的图片加载策略，不要混淆两者的使用场景。
+3. **preconnect 最多 3 个，dns-prefetch 最多 6 个**：过多的预连接反而消耗带宽和 CPU 资源。
+4. **用 Performance 面板的 Network 瀑布图验证效果**：添加资源提示后，检查瀑布图中资源的加载时机是否符合预期。
 
 ## 小结
 

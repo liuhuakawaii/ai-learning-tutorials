@@ -2,6 +2,10 @@
 
 > 从零开始，彻底搞懂 Docker —— 后端开发者的必备技能
 
+## 场景引入
+
+你刚入职一家公司，Leader 给你一个项目让你跑起来。你克隆了代码，发现 README 写着"需要 Node 18、PostgreSQL 15、Redis 7"。你花了一上午装环境，结果 PostgreSQL 版本不对，Redis 配置冲突，最后折腾到下午才跑起来。隔壁同事用 Docker，一条命令 `docker compose up -d`，三分钟搞定。这不是个例——"在我电脑上能跑"是开发团队最经典的痛点。Docker 通过容器化技术，把应用和它需要的一切（代码、运行时、库、配置）打包成一个标准化单元，让"到处都能跑"成为现实。本课将从零开始，带你彻底掌握 Docker 的核心概念和实操技能。
+
 ## 学习目标
 
 完成本课时后，你将能够：
@@ -1256,6 +1260,30 @@ docker rm -f my-redis
 3. Redis 缓存
 4. 正确的环境变量、端口映射、数据卷
 5. 健康检查和依赖关系
+
+---
+
+## 常见误区
+
+1. **把 `node_modules` 复制到容器中**：Windows 编译的 `node_modules` 包含原生模块（如 bcrypt），直接复制到 Linux 容器中会因为架构不兼容而报错。应该在 Dockerfile 中用 `npm ci` 重新安装。
+
+2. **不用 `.dockerignore` 文件**：`COPY . .` 会把 `.git`、`node_modules`、`.env` 等不需要的文件全部复制到镜像中，导致构建缓慢且可能泄露敏感信息。必须创建 `.dockerignore` 排除这些文件。
+
+3. **数据不持久化**：数据库数据直接存在容器内部，`docker rm` 删除容器后数据全部丢失。必须用命名卷（Volume）持久化数据库数据、上传文件等重要数据。
+
+4. **容器间通信用 `localhost`**：在容器 A 中用 `localhost:5432` 连接容器 B 的 PostgreSQL，结果连不上。容器有自己独立的网络，`localhost` 指的是容器自己。必须用服务名（如 `postgres:5432`）访问其他容器。
+
+---
+
+## 工程建议
+
+1. **先复制依赖文件再复制源代码**：`COPY package.json ./ → RUN npm ci → COPY . .`。这样依赖没变时会命中 Docker 缓存，不需要重新安装依赖，构建速度提升 10 倍。
+
+2. **用 Alpine 基础镜像减小体积**：`node:20` 约 1GB，`node:20-alpine` 约 130MB。Alpine 是极小的 Linux 发行版，对于 Node.js 应用完全够用。
+
+3. **健康检查要在 Compose 中配置**：`healthcheck` + `condition: service_healthy` 确保依赖服务真正就绪后才启动应用。比单纯的 `depends_on`（只保证启动顺序）可靠得多。
+
+4. **本地开发用绑定挂载，生产用命名卷**：开发时 `./src:/app/src` 实现代码热更新；生产时 `postgres_data:/var/lib/postgresql/data` 确保数据持久化且不依赖宿主机路径。
 
 ---
 

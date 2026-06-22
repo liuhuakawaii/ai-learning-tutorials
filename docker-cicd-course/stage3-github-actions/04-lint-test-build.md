@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你提交了一个 PR，CI 跑了 5 分钟才告诉你有一个 ESLint 错误。你修了错误再提交，又等了 5 分钟——这次测试挂了。你开始想：能不能让 lint 和测试并行跑？能不能先跑 lint，lint 不过就不跑测试，节省时间和资源？
+
+---
+
 ## 学习目标
 
 1. 在 CI 中配置 ESLint 代码检查
@@ -251,6 +257,24 @@ jobs:
       - run: npm test
       - run: npm run build
 ```
+
+---
+
+## 常见误区
+
+- **"CI 只需要跑测试就够了"**：测试验证逻辑正确性，但不检查代码风格和潜在问题。Lint 能发现未使用的变量、不安全的类型转换等测试覆盖不到的问题。
+- **"测试在本地跑过了就不需要 CI"**：本地环境可能和 CI 不同（Node 版本、操作系统、依赖版本），CI 提供了一个干净、一致的验证环境。
+- **"构建失败不影响部署"**：构建是部署的前置条件。如果代码都编译不过，部署上去也是白费。所以 build 应该依赖 lint 和 test。
+- **"数据库测试太复杂，CI 里跑不了"**：GitHub Actions 的 `services` 可以启动 PostgreSQL、Redis 等服务容器，和本地 docker-compose 类似。
+
+---
+
+## 工程建议
+
+- **lint 和 test 并行，build 等它们完成后再跑**：`needs: [lint, test]` 让 build 只在两者都通过后执行，既快又安全。
+- **测试生成覆盖率报告**：`npm test -- --coverage` 生成覆盖率，用 `upload-artifact` 上传，方便 review 时查看。
+- **数据库测试用 `services` 启动容器**：`services.postgres` 在 Job 级别启动，所有 Step 共享，测试完成后自动清理。
+- **构建产物用 `upload-artifact` 保存**：后续的部署 Job 可以下载产物，不需要重新构建。
 
 ---
 

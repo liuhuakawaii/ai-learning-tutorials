@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你上线了一个 AI 研究助手，用户提交了一个研究任务，Agent 正在调用搜索工具获取资料。这时候用户关闭了浏览器，十分钟后重新打开页面——他看到的是什么？如果没有任何状态管理，他只能看到一片空白，之前的搜索结果全丢了。更糟糕的情况是：Agent 正在执行一个发送邮件的工具，用户想取消但系统没有"取消中"这个状态，Agent 继续执行了用户不想要的操作。Agent 状态机要解决的就是这个问题：让 Agent 的每一步都可追踪、可暂停、可恢复、可取消。
+
+---
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -149,7 +155,7 @@ interface AgentState {
   id: string
   status: AgentStatus
   task: string
-  input: ResponseInputMessage[]
+  messages: ResponseInputMessage[]
   steps: AgentStep[]
   result?: string
   error?: string
@@ -166,7 +172,7 @@ export class Agent {
       id: `agent-${Date.now()}`,
       status: AgentStatus.PENDING,
       task,
-      input: [
+      messages: [
         {
           role: 'system',
           content: '你是一个能使用工具完成任务的助手。',
@@ -419,7 +425,7 @@ export async function loadAgentState(id: string): Promise<Agent | null> {
     id: row.id,
     status: row.status,
     task: row.task,
-    input: JSON.parse(row.messages),
+    messages: JSON.parse(row.messages),
     steps: JSON.parse(row.steps),
     result: row.result,
     error: row.error,
@@ -518,6 +524,24 @@ export function AgentStatus({ status, steps, result, error }: Props) {
 1. 实现 Agent 状态存储
 2. 实现状态恢复
 3. 测试崩溃恢复
+
+---
+
+## 常见误区
+
+1. **状态转换不加校验**：直接 `state.status = newStatus` 而不检查当前状态是否允许转到目标状态。比如从 DONE 直接转到 RUNNING，或者从 FAILED 转到 PENDING，这些非法转换会导致状态混乱。必须用 `canTransition()` 校验。
+2. **DONE 和 FAILED 之后没有清理逻辑**：终态不是终点。Agent 完成后需要释放资源（关闭数据库连接、清理临时文件）、通知用户、记录日志。在 `updateStatus` 中为终态注册回调。
+3. **阻塞状态没有超时机制**：Agent 进入 BLOCKED 等待用户确认，但用户一直不操作，Agent 就永远停在那里。必须设置超时（如 60 秒），超时后自动转为 FAILED 或执行默认操作。
+4. **持久化时只存最终结果**：如果只存 status 和 result，崩溃恢复后用户看不到之前执行到哪一步。要持久化完整的 messages 和 steps 数组，才能恢复到中断前的状态继续执行。
+
+---
+
+## 工程建议
+
+1. **用状态转换表驱动逻辑**：把所有合法转换定义在一个 `VALID_TRANSITIONS` 映射表中，校验和执行都基于这张表。新增状态时只需修改表，不用改散落在各处的 if-else。
+2. **给每个终态注册 onEnter 回调**：DONE 时发送通知、清理资源、更新统计数据；FAILED 时记录错误详情、发送告警、尝试自动恢复。回调集中管理，避免遗漏。
+3. **持久化用 upsert 模式**：Agent 状态频繁更新，每次状态变化都 insert 一条记录会导致数据膨胀。用 `ON CONFLICT DO UPDATE` 的 upsert 模式，每个 Agent 只保留最新状态。
+4. **状态变化要发事件**：通过 EventEmitter 或消息队列广播状态变化事件，让前端、日志系统、监控系统都能实时感知。不要让状态变化静默发生。
 
 ---
 

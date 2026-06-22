@@ -2,6 +2,12 @@
 
 > MCP Prompt Template 让你可以在 Server 端管理 Prompt，实现集中化管理。
 
+## 场景引入
+
+团队里有 5 个开发者，每个人都在自己的代码里硬编码了"代码审查"的 Prompt。某天产品经理说要给审查增加"安全检查"维度，你发现要改 5 个地方。更麻烦的是，每个人的 Prompt 格式不统一，AI 的审查质量参差不齐。你希望能把 Prompt 集中管理在 Server 端，统一更新、统一版本、统一格式——这就是 MCP Prompt Template 要解决的问题。
+
+---
+
 ## 学习目标
 
 - 掌握 MCP Prompt Template 的设计和实现
@@ -146,12 +152,51 @@ class PromptVersionManager:
         return versions[latest]["template"]
 ```
 
+## 常见误区
+
+```
+误区 1：Prompt Template 就是字符串模板
+  MCP Prompt Template 不只是字符串替换，它是一个完整的 Prompt 管理系统。
+  包括版本控制、参数校验、动态生成等能力。
+
+误区 2：所有 Prompt 都应该放 Server 端
+  只有需要跨 Client 复用、需要统一管理的 Prompt 才放 Server 端。
+  一次性、场景特定的 Prompt 直接在 Client 端构造更简单。
+
+误区 3：Prompt Template 不需要版本控制
+  Prompt 是会演进的。今天的代码审查 Prompt 和三个月后的可能完全不同。
+  没有版本控制，你无法回滚到之前效果更好的版本。
+
+误区 4：参数化就是简单的字符串替换
+  参数化要考虑输入校验、默认值、可选参数。
+  用户传入恶意内容时，Prompt Template 要能安全处理。
+```
+
+---
+
+## 工程建议
+
+```
+1. Prompt Template 命名要有业务语义
+  code_review、data_analysis、bug_diagnosis——
+  名字要让 AI 一看就知道这个 Prompt 是干什么的。
+
+2. 用 description 说明 Prompt 的用途和参数
+  和 Tool 一样，Prompt 的 description 是 AI 选择使用它的依据。
+  说明每个参数的含义、类型、默认值。
+
+3. 版本号用语义化版本
+  major.minor.patch 格式，breaking change 升 major。
+  Client 可以指定版本范围，Server 返回兼容的最新版本。
+
+4. 测试 Prompt 的渲染结果
+  用不同的参数组合测试 Prompt Template，确保渲染结果符合预期。
+  特别关注：参数为空、参数超长、特殊字符。
+```
+
 ---
 
 ## 小结
-
-```
-本课核心要点：
 
 1. Prompt Template 在 Server 端管理 Prompt
 2. 支持参数化和动态配置

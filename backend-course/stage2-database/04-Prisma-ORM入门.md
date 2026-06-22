@@ -1,10 +1,8 @@
 # 第四课：Prisma ORM 入门
 
-> **课程定位：** 第二阶段 · 数据库 · 第 4 课时
-> **前置知识：** PostgreSQL 安装与使用（第三课）
-> **预计时长：** 75 分钟
+## 场景引入
 
----
+你已经能在 psql 里熟练地写 SQL 了，但在 Node.js 代码里直接写 SQL 字符串有几个大问题：字符串拼接容易被注入攻击，查询结果没有类型提示（全是 `any`），不同数据库的 SQL 语法还有差异。你想要一种方式，能用 TypeScript 代码操作数据库，有自动补全、有类型检查、还能防止 SQL 注入。这就是 ORM（对象关系映射）做的事情——它是代码和数据库之间的"翻译官"。Prisma 是 TypeScript 生态中最好的 ORM，自动生成类型安全的客户端，Schema 文件就是数据库文档。
 
 ## 学习目标
 
@@ -1134,6 +1132,20 @@ Prisma CLI 命令速查表：
 ```
 
 ---
+
+## 常见误区
+
+1. **每次使用都 new PrismaClient()**：每个 PrismaClient 实例都会创建一个数据库连接池，多次实例化会耗尽连接数。应该用单例模式，整个应用只创建一个实例。
+2. **把 .env 文件提交到 Git**：`.env` 包含数据库密码等敏感信息，应该加入 `.gitignore`。提交模板文件 `.env.example`（不含真实密码）供团队参考。
+3. **修改 Schema 后忘记执行 prisma generate**：修改 `schema.prisma` 后，需要执行 `npx prisma generate` 重新生成 Prisma Client，否则新的字段和模型在代码中不可用。
+4. **混淆 prisma migrate dev 和 prisma db push**：`migrate dev` 创建可版本控制的迁移文件，适合生产环境；`db push` 直接同步 Schema 到数据库但不生成迁移文件，适合快速原型开发。
+
+## 工程建议
+
+1. **Schema 文件即文档**：在每个 model 和字段上方写注释，说明业务含义。Prisma Schema 比 SQL DDL 更易读，是团队理解数据模型的最佳参考。
+2. **用 Prisma Studio 快速查看和编辑数据**：执行 `npx prisma studio` 打开可视化界面，像操作 Excel 一样操作数据库，比写 SQL 更直观。
+3. **开发环境开启查询日志**：在 PrismaClient 配置中设置 `log: ['query']`，可以看到 Prisma 生成的 SQL，帮你理解 ORM 的工作方式和排查性能问题。
+4. **先用简单模型跑通整个流程**：不要一上来就设计完整的博客 Schema。先用一个 User 模型完成 init → generate → migrate → 查询的完整流程，再逐步扩展。
 
 ## 十一、小结
 

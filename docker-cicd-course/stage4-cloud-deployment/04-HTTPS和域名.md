@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你的应用通过 `http://服务器IP` 能访问了，但浏览器地址栏显示"不安全"，用户不敢输入密码。你需要配置 HTTPS，让用户看到安全锁图标。同时，你买了一个域名，想让 `https://my-app.com` 指向你的服务器。域名怎么解析？证书怎么申请？过期了怎么办？
+
+---
+
 ## 学习目标
 
 1. 了解域名购买和 DNS 配置
@@ -164,6 +170,24 @@ curl -vI https://my-app.com 2>&1 | grep -i "ssl\|certificate"
 # 4. 配置 Nginx HTTPS
 # 5. 验证 HTTPS 工作
 ```
+
+---
+
+## 常见误区
+
+- **"HTTPS 只有付费证书才行"**：Let's Encrypt 提供免费的 SSL 证书，自动续期，和付费证书一样安全。90% 的场景不需要买付费证书。
+- **"证书配置一次就够了"**：Let's Encrypt 证书有效期 90 天，需要自动续期。如果续期失败，证书过期后用户会看到安全警告。
+- **"DNS 配置后立刻生效"**：DNS 有缓存，修改后可能需要几分钟到几小时才能全球生效。`.com` 域名通常几分钟，某些 TLD 可能更久。
+- **"HTTPS 会影响性能"**：现代 HTTPS 的性能开销很小（TLS 1.3），而且 HTTP/2 只在 HTTPS 下可用，反而能提升性能。
+
+---
+
+## 工程建议
+
+- **用 Cloudflare 管理 DNS**：免费、功能强大、全球 CDN、自动 HTTPS。即使不用 Cloudflare 的 CDN，DNS 管理也比大多数注册商好用。
+- **Certbot 自动续期要验证**：`certbot renew --dry-run` 测试续期是否正常。配置 cron 任务定期检查证书到期时间。
+- **HTTP 自动跳转 HTTPS**：Nginx 配置 `return 301 https://$server_name$request_uri`，确保所有访问都走 HTTPS。
+- **混合内容问题要彻底解决**：页面中加载的 JS、CSS、图片都必须是 HTTPS，否则浏览器会阻止加载或显示警告。
 
 ---
 

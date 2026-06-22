@@ -1,5 +1,9 @@
 # 第一课：Prisma + PostgreSQL 项目初始化
 
+## 场景引入
+
+你的 Next.js 项目已经有了页面和组件，但数据都写死在代码里。你决定引入数据库来持久化存储数据，于是开始写原生 SQL：`SELECT * FROM users WHERE id = $1`——然后你发现要手动拼接查询字符串、手动解析结果集、手动维护表结构变更，每改一个字段就要写一堆 ALTER TABLE 语句。更痛苦的是，SQL 查询返回的是 `any` 类型，TypeScript 完全帮不上忙，拼错字段名只有运行时才会报错。你需要一个工具，让你用 TypeScript 的方式操作数据库，同时自动管理表结构的版本迁移。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -490,6 +494,20 @@ export async function GET() {
 ```
 
 ---
+
+## 常见误区
+
+1. **"Prisma Client 可以在 Client Component 中使用"**：Prisma Client 需要连接数据库，只能在服务端（Server Component、Server Action、API Route）中使用。在 Client Component 中调用会报错。
+2. **"每次使用都 new PrismaClient()"**：Next.js 开发模式下热重载会反复执行模块代码，每次都创建新的 Prisma Client 实例会耗尽数据库连接池。必须使用全局单例模式。
+3. **"Schema 改了直接部署就行"**：修改 `schema.prisma` 后必须运行 `npx prisma migrate dev` 生成迁移文件并应用到数据库。直接部署会导致代码和数据库结构不一致。
+4. **"Docker 容器重启数据就丢了"**：使用 Docker 运行 PostgreSQL 时，如果没有挂载 volume（`-v postgres_data:/var/lib/postgresql/data`），容器重启后数据确实会丢失。
+
+## 工程建议
+
+1. **始终使用全局单例模式初始化 Prisma Client**：在 `lib/prisma.ts` 中用 `globalThis` 缓存实例，避免开发环境连接耗尽。这是 Next.js + Prisma 的标准模式。
+2. **迁移文件要提交到 Git**：`prisma/migrations/` 目录下的文件应该纳入版本控制，这样团队成员和 CI/CD 环境可以用 `npx prisma migrate deploy` 重放迁移。
+3. **善用 Prisma Studio 调试数据**：`npx prisma studio` 可以在浏览器中查看、编辑数据库记录，比写 SQL 查询更高效，尤其适合开发阶段的数据验证。
+4. **`@default(autoincrement())` vs `@default(cuid())`**：自增 ID 简单但可预测（安全风险），`cuid()` 生成的 ID 不可预测且适合分布式系统。生产环境推荐使用 `cuid()` 或 `uuid()`。
 
 ## 九、小结
 

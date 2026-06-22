@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你问 LLM："今天上海的天气怎么样？"它要么编造一个答案，要么告诉你它无法获取实时信息。你问它"帮我算一下这个复杂表达式"，它可能在心算时出错。LLM 的知识是静态的，计算能力也有限。在真实场景中，Agent 需要能够调用外部工具——搜索引擎、计算器、数据库——来获取信息并执行操作，然后根据工具返回的结果继续推理。
+
+---
+
 ## 学习目标
 
 1. 理解 ReAct（Reasoning + Acting）的核心思想
@@ -219,16 +225,17 @@ class CodeExecutionTool(Tool):
 
     def execute(self, code: str) -> ToolResult:
         try:
-            # 创建受限的执行环境
+            # 创建受限的执行环境——禁止 __builtins__ 中的危险函数
+            safe_builtins = {"__builtins__": {}}
             local_vars = {}
-            exec(code, {"__builtins__": __builtins__}, local_vars)
+            exec(code, safe_builtins, local_vars)
 
             # 尝试获取最后的表达式结果
             lines = code.strip().split("\n")
             last_line = lines[-1].strip()
 
             if "=" not in last_line and not last_line.startswith(("print", "def", "class", "if", "for", "while")):
-                result = eval(last_line, {"__builtins__": __builtins__}, local_vars)
+                result = eval(last_line, safe_builtins, local_vars)
                 return ToolResult(success=True, output=str(result))
             else:
                 # 检查是否有 print 输出
@@ -659,7 +666,7 @@ class ParallelReActAgent(ReActAgent):
 
 ---
 
-## 6. 常见错误
+## 6. 常见误区
 
 | 错误 | 正确做法 |
 |------|----------|
@@ -671,7 +678,16 @@ class ParallelReActAgent(ReActAgent):
 
 ---
 
-## 7. 本节小结
+## 7. 工程建议
+
+1. 工具描述要尽可能详细和精确，模型对工具的理解直接影响调用准确率
+2. 每个工具调用都必须有错误处理和超时机制，避免单个工具故障导致整个 Agent 卡死
+3. 设置合理的最大迭代次数（建议 8-15），并监控循环次数防止无限循环
+4. 对工具输出进行合理性校验，防止模型基于错误的工具结果做出错误推理
+
+---
+
+## 8. 本节小结
 
 ReAct 是构建智能 Agent 的核心框架：
 

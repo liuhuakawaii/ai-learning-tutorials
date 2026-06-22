@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你的项目有三个服务：Node.js API、PostgreSQL 数据库、Redis 缓存。每次启动项目，你都要打开三个终端窗口，分别执行三条 `docker run` 命令，还要记清楚网络名、端口映射、环境变量。某天你漏了一个参数，数据库连接不上，排查了半小时。你开始想：能不能把这些命令写成一个配置文件，一条命令搞定？
+
+---
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -287,6 +293,24 @@ docker compose ps
 docker compose logs app
 docker compose down
 ```
+
+---
+
+## 常见误区
+
+- **"depends_on 保证服务可用"**：`depends_on` 只保证容器启动，不保证服务就绪。数据库容器启动后还需要几秒初始化，必须配合 `healthcheck` + `condition: service_healthy` 才能确保服务真正可用。
+- **"Compose 文件名必须是 docker-compose.yml"**：新版 Docker Compose 支持 `compose.yml` 作为默认文件名，不需要 `docker-` 前缀。两者都支持，但推荐用更简洁的 `compose.yml`。
+- **"docker compose down 会删除所有数据"**：默认情况下 `down` 只停止和删除容器，不会删除 Volume 中的数据。加 `-v` 参数才会删除 Volume。
+- **"Compose 只能用于开发环境"**：Compose 也适用于小型生产部署。对于不需要 Kubernetes 级别编排的项目，Compose 是更简单实用的选择。
+
+---
+
+## 工程建议
+
+- **用 `docker compose config` 检查语法**：修改 compose.yml 后先跑 `config` 验证，避免启动时才发现格式错误。
+- **为服务配置 `restart: unless-stopped`**：生产环境中服务崩溃后自动重启，但手动停止后不会自动启动，兼顾可靠性和可控性。
+- **用 `docker compose logs -f service-name` 定位问题**：不要看所有服务的日志混在一起，按服务名过滤更高效。
+- **把 compose.yml 纳入版本控制**：compose.yml 是项目基础设施配置，应该和代码一起维护，但 `.env` 文件不要提交。
 
 ---
 

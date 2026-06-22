@@ -1,10 +1,8 @@
 # 第二课：SQL 入门
 
-> **课程定位：** 第二阶段 · 数据库 · 第 2 课时
-> **前置知识：** 数据库基础概念（第一课）
-> **预计时长：** 90 分钟
+## 场景引入
 
----
+你已经理解了数据库的基本概念——表、行、列、主键、外键。但光有概念还不够，你需要一门语言来和数据库"对话"。就像学了中文语法还不够，你得会开口说话。SQL（Structured Query Language）就是你和关系型数据库沟通的语言。你想创建一张表，用 `CREATE TABLE`；想插入一条数据，用 `INSERT INTO`；想查询满足条件的记录，用 `SELECT ... WHERE`。掌握 SQL，是操作任何关系型数据库的基础技能。
 
 ## 学习目标
 
@@ -908,6 +906,20 @@ DELETE FROM posts WHERE id = 6;
 ```
 
 ---
+
+## 常见误区
+
+1. **DELETE 不带 WHERE 条件**：`DELETE FROM posts` 会删除表中的所有数据！每次执行删除操作前，务必确认 WHERE 条件是否正确。建议先用 `SELECT` 验证条件，再执行 DELETE。
+2. **用双引号包裹字符串**：SQL 标准中字符串用单引号（`'hello'`），双引号用于标识符（表名、列名）。`WHERE name = "张三"` 在某些数据库中会报错。
+3. **混淆 WHERE 和 HAVING**：WHERE 在分组之前过滤行，HAVING 在分组之后过滤组。`WHERE COUNT(*) > 5` 是语法错误，应该用 `HAVING COUNT(*) > 5`。
+4. **忘记 GROUP BY 的列必须出现在 SELECT 中**：使用 GROUP BY 时，SELECT 中的非聚合字段必须出现在 GROUP BY 子句中，否则结果不确定。
+
+## 工程建议
+
+1. **先用 SELECT 验证再执行 UPDATE/DELETE**：在修改或删除数据前，先用相同的 WHERE 条件执行 SELECT，确认影响的行数和内容是否符合预期。
+2. **使用参数化查询防止 SQL 注入**：不要用字符串拼接 SQL（`WHERE id = ${id}`），使用参数化查询（`WHERE id = $1`）可以防止 SQL 注入攻击。
+3. **为常用查询字段创建索引**：WHERE、ORDER BY、JOIN 中频繁使用的字段应该创建索引，查询性能可以提升几十甚至几百倍。
+4. **用 EXPLAIN 分析查询计划**：PostgreSQL 的 `EXPLAIN ANALYZE` 可以显示查询的执行计划和耗时，帮你发现全表扫描等性能问题。
 
 ## 九、小结
 

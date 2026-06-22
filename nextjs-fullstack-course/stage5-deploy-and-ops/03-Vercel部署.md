@@ -1,5 +1,9 @@
 # 第三课：Vercel 部署
 
+## 场景引入
+
+你花了两周开发的 SaaS 产品终于要上线了。你租了一台云服务器，安装了 Node.js，配置了 Nginx 反向代理，申请了 SSL 证书，设置了 PM2 进程守护——光是部署环境就折腾了一整天。一周后你推送了一个 bugfix，又要手动 SSH 到服务器拉代码、重新构建、重启服务。某天凌晨服务器内存溢出，你的网站挂了 3 小时才被发现。如果有一个平台能让你 push 代码就自动部署、自带 HTTPS、自动扩缩容，这些痛苦都可以避免。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -327,7 +331,31 @@ Vercel Dashboard → Project → Logs
 
 ---
 
-## 十一、小结
+## 十一、常见误区
+
+1. **忽略 Prisma 的 `postinstall` 脚本**：Vercel 部署时默认运行 `npm install`，但 Prisma Client 需要在安装后生成。如果 `package.json` 中没有 `"postinstall": "prisma generate"`，部署会报错。
+
+2. **环境变量只配了 Production 环境**：Vercel 有 Production、Preview、Development 三个环境。Preview 部署（PR 自动生成）如果缺少环境变量，会静默失败或使用错误的配置。
+
+3. **把所有东西都塞进 Server Component**：虽然 Server Component 减少了客户端 JS，但需要交互的组件（如表单、弹窗）仍然需要 `'use client'`。过度追求 Server Component 会导致交互功能缺失。
+
+4. **忽略 Vercel 的函数超时限制**：Vercel 的 Serverless Function 在 Hobby 计划下有 10 秒超时限制。长时间运行的任务（如数据导出、批量处理）应该改用 Background Functions 或外部队列。
+
+---
+
+## 十二、工程建议
+
+1. **构建命令中集成数据库迁移**：`"build": "prisma generate && prisma migrate deploy && next build"` 确保每次部署都自动执行迁移。
+
+2. **使用 Vercel 的 Preview 部署做 Code Review**：每个 PR 自动生成预览链接，审查者可以直接在预览环境测试功能，而不是只看代码。
+
+3. **为 Vercel 配置 `vercel.json` 做精细控制**：可以配置重定向、自定义 headers、函数区域、Cron Jobs 等，避免在代码中硬编码平台相关的配置。
+
+4. **使用 Vercel Analytics 监控真实用户性能**：Vercel 内置的 Web Vitals 监控可以收集真实用户的 LCP、INP、CLS 数据，比 Lighthouse 的实验室数据更有参考价值。
+
+---
+
+## 十三、小结
 
 ```
 本课核心要点：

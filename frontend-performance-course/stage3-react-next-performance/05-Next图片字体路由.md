@@ -4,6 +4,10 @@
 > **前置知识**：了解 React 基础和 Next.js App Router
 > **预计时长**：40 分钟
 
+## 场景引入
+
+你把一个 React SPA 迁移到了 Next.js App Router，本以为性能会自动变好，结果 Lighthouse 分数反而从 75 降到了 68。排查发现：你还在用 `<img>` 标签加载图片，没有用 next/image 的自动格式转换和响应式尺寸；Google Fonts 通过 `<link>` 标签引入，导致额外的 DNS 查询和布局偏移；所有页面都是客户端渲染，没有利用 Server Components 减少 JS 体积。Next.js 内置了大量性能优化能力，但它们不会自动生效——你需要知道在哪里用、怎么用。
+
 ---
 
 ## 学习目标
@@ -368,6 +372,20 @@ export default function Layout({ analytics, notifications }) {
 ```
 
 ---
+
+## 常见误区
+
+1. **给所有图片都加 priority**：priority 会禁用懒加载并预加载图片。只有首屏最大的图片（LCP 元素）才需要 priority，其他图片应该用默认的懒加载。
+2. **手动引入 Google Fonts 而不用 next/font**：手动 `<link>` 引入会向 Google 发送请求（隐私问题），且无法自动匹配后备字体尺寸（布局偏移）。next/font 自动处理这些问题。
+3. **不设置 sizes 属性**：没有 sizes，浏览器可能下载比实际显示尺寸更大的图片。设置 sizes="(max-width: 768px) 100vw, 50vw" 让浏览器选择最合适的图片。
+4. **把所有数据都设为 no-store**：不缓存意味着每次请求都要重新获取数据，增加服务器负载和响应时间。静态数据应该用默认缓存，动态数据用 revalidate 定时刷新。
+
+## 工程建议
+
+1. **首屏图片用 next/image 的 priority 属性**：它会自动生成 preload 标签、设置 fetchpriority="high"，一步到位。
+2. **用 next/font 加载所有字体**：无论是 Google Fonts 还是本地字体，next/font 都能自动处理内联 CSS、预加载和后备字体匹配。
+3. **静态页面用默认缓存，动态页面用 revalidate**：博客文章用默认缓存（构建时渲染），用户个人数据用 no-store（每次请求渲染），商品列表用 revalidate: 3600（每小时刷新）。
+4. **用 loading.tsx 提供即时反馈**：Next.js 的 loading.tsx 会自动包装成 Suspense，在页面数据加载时显示骨架屏。
 
 ## 动手练习
 

@@ -2,6 +2,12 @@
 
 > 开发自己的 MCP Client，让你的应用能够调用任何 MCP Server。
 
+## 场景引入
+
+你用 Claude Desktop 测试了自己写的 MCP Server，效果很好。现在产品经理说要在公司的 Web 应用里集成这个 Server——但 Web 应用不能用 Claude Desktop，你需要自己实现 MCP Client。Client 要能初始化连接、发现工具、调用工具、处理错误，还要支持 stdio 和 HTTP 两种传输方式。从零写一个 Client SDK，该从哪里开始？
+
+---
+
 ## 学习目标
 
 - 掌握 MCP Client 的开发方法
@@ -146,12 +152,51 @@ class MCPClient:
         return content[0].get("text", "") if content else ""
 ```
 
+## 常见误区
+
+```
+误区 1：Client 就是发 HTTP 请求
+  Client 不只是发请求，还要处理能力协商、工具发现、错误转换、连接管理。
+  只发 HTTP 请求只是传输层，不等于完整的 Client。
+
+误区 2：list_tools 只需要调一次
+  Tool 列表可能在运行时变化（Server 发送 listChanged 通知）。
+  Client 应该监听通知，及时更新本地缓存的工具列表。
+
+误区 3：错误处理是 Server 的事
+  Client 也要做错误处理：网络断连要重连、超时要重试、协议错误要转换。
+  Server 返回的 JSON-RPC 错误码要转换为对 Host 友好的异常。
+
+误区 4：Client 不需要处理并发
+  如果 Host 同时发起多个工具调用，Client 要能正确匹配请求和响应。
+  用 request_id 匹配，不能假设响应顺序和请求顺序一致。
+```
+
+---
+
+## 工程建议
+
+```
+1. 传输层用策略模式
+  把 stdio、HTTP、SSE 封装为不同的传输策略，Client 通过接口调用。
+  这样切换传输方式只需要替换策略，不需要改 Client 代码。
+
+2. 超时和重试是 Client 的责任
+  Client 发送请求时设置超时（如 30 秒），超时后自动重试（最多 3 次）。
+  Server 不需要知道 Client 在重试。
+
+3. 工具列表要缓存和刷新
+  初始化时获取工具列表并缓存。收到 listChanged 通知时刷新缓存。
+  缓存避免每次调用前都请求工具列表。
+
+4. 提供同步和异步两种 API
+  某些 Host（如命令行工具）需要同步调用，Web 应用需要异步调用。
+  底层用异步实现，同步 API 用事件循环包装。
+```
+
 ---
 
 ## 小结
-
-```
-本课核心要点：
 
 1. MCP Client 负责与 Server 通信
 2. 支持多种传输层：stdio、HTTP

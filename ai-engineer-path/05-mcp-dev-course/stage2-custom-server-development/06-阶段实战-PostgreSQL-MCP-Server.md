@@ -2,6 +2,12 @@
 
 > 把前 5 课学到的知识整合成一个完整的 PostgreSQL MCP Server。
 
+## 场景引入
+
+前 5 课你分别学了 Tool、Resource、Prompt 的开发和错误处理。现在要把这些知识整合起来，为公司的真实 PostgreSQL 数据库开发一个完整的 MCP Server。这个 Server 要让 AI 助手能查询表结构、执行 SQL、生成复杂查询——而且要安全、健壮、可维护。这不是 demo，是生产级的工具。
+
+---
+
 ## 学习目标
 
 - 开发一个完整的 PostgreSQL MCP Server
@@ -139,12 +145,51 @@ python server.py
 npx @modelcontextprotocol/inspector python server.py
 ```
 
+## 常见误区
+
+```
+误区 1：直接拼接 SQL 字符串
+  即使是只读查询，也要用参数化查询防止 SQL 注入。
+  asyncpg 的 $1、$2 参数化语法比字符串拼接安全得多。
+
+误区 2：连接池大小越大越好
+  连接池大小应该等于 CPU 核心数 × 2 + 磁盘数。
+  过大的连接池反而会因为上下文切换降低性能。
+
+误区 3：Resource 和 Tool 返回相同的数据
+  Resource 返回元数据（表结构、列信息），Tool 返回实际数据（查询结果）。
+  两者的职责不同，不要混用。
+
+误区 4：生产环境不需要 MCP Inspector 测试
+  Inspector 不仅用于开发调试，也应该作为 CI/CD 的一部分。
+  每次部署前用 Inspector 跑一遍回归测试。
+```
+
+---
+
+## 工程建议
+
+```
+1. 只读查询和写操作分开部署
+  query Tool 可以暴露给所有用户，execute Tool 只暴露给管理员。
+  甚至可以把它们放在不同的 Server 实例中。
+
+2. 自动添加 LIMIT 保护
+  对没有 LIMIT 的 SELECT 查询自动添加 LIMIT 1000。
+  防止 AI 生成全表扫描的查询拖垮数据库。
+
+3. Resource 要缓存
+  表结构不会频繁变化，Resource 数据应该缓存。
+  设置合理的 TTL（如 5 分钟），减少数据库压力。
+
+4. 记录所有 Tool 调用的审计日志
+  每次 tools/call 都要记录：谁调用、什么参数、什么结果、耗时多久。
+  这是安全审计和性能优化的基础数据。
+```
+
 ---
 
 ## 小结
-
-```
-本课核心要点：
 
 1. 完整的 PostgreSQL MCP Server 包含 Tool、Resource、Prompt
 2. Tool 提供查询和执行能力

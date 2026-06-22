@@ -2,6 +2,10 @@
 
 > Redis 不只是缓存——它是 AI 应用的"短期记忆"。
 
+## 场景引入
+
+你的 AI 应用上线了，用户量增长后问题来了：每次对话都要从数据库查历史消息，响应越来越慢；LLM API 调用太贵，但用户疯狂发请求没有限制；Agent 执行耗时任务时用户只能干等。你需要一个能快速读写的缓存层来存对话上下文，一个限流机制来控制 API 调用频率，一个异步队列来处理耗时任务——Redis 就是这把"瑞士军刀"。
+
 ## 学习目标
 
 - 理解 Redis 在 AI 应用中的多种用途
@@ -153,9 +157,10 @@ class ChatService:
         ai_response = await self._call_llm(history, content)
         
         # 4. 保存到缓存（快）
+        user_message = {"role": "user", "content": content}
         await self.cache.add_message(session_id, user_message)
         await self.cache.add_message(session_id, ai_response)
-        
+
         # 5. 异步保存到数据库（不阻塞响应）
         await self._save_to_db_async(session_id, user_message, ai_response)
         
@@ -464,7 +469,7 @@ async def rebuild_knowledge_base_index(kb_id: str, redis: redis.Redis):
 - 限流是 AI 应用的必须——LLM API 调用太贵了
 - 异步任务队列让用户体验更流畅（不用等 Agent 执行完）
 
-## 常见错误
+## 常见误区
 
 | 错误 | 原因 | 解决 |
 |------|------|------|
@@ -472,3 +477,11 @@ async def rebuild_knowledge_base_index(kb_id: str, redis: redis.Redis):
 | 缓存和数据库数据不一致 | 改了数据库没更新缓存 | 先更新数据库，再删除缓存 |
 | 限流不生效 | key 设计不对 | 确保 key 包含用户标识 |
 | 任务丢失 | Worker 执行中崩溃 | 用 `processing` 集合追踪，重启后恢复 |
+
+## 工程建议
+
+- 缓存和数据库的一致性是永恒难题，推荐"先更新数据库，再删除缓存"的策略，而不是试图保持双写同步
+- 限流算法要根据业务场景选择：固定窗口简单但有边界突发问题，滑动窗口更平滑但实现复杂度高
+- 任务队列要有重试机制和死信队列，避免任务因偶发错误永久丢失
+- Redis 连接池要配置合理的 `max_connections`，生产环境建议监控连接使用率
+- 生产环境 Redis 要开启持久化（AOF + RDB），避免数据丢失；同时配置哨兵或集群保证高可用

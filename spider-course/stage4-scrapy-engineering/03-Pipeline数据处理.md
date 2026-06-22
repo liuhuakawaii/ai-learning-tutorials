@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+Spider 跑起来了，数据也 yield 出来了，但你打开 JSON 文件一看：价格字段是 `"$ 79.00"` 这样的字符串，评分是英文单词 `"four"`，有些记录 title 是空的，还有两条完全重复的数据。你意识到，Spider 只负责"从网页上把数据抠下来"，至于数据干不干净、合不合规、存到哪里——这些都得另有人管。Pipeline 就是干这个的。
+
+---
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -660,6 +666,24 @@ class PriceCleanPipeline:
 3. `JsonSavePipeline`（优先级 500）：保存到 JSON 文件
 
 在 `settings.py` 中正确配置 `ITEM_PIPELINES`，运行爬虫验证整条链是否正常工作。
+
+---
+
+## 常见误区
+
+- **`process_item()` 忘记返回 item**：这是最常见的错误。如果既没有 `return item` 也没有 `raise DropItem`，函数默认返回 `None`，Scrapy 会直接报错。记住：返回 item = 放行，抛 DropItem = 拦截。
+- **把所有逻辑塞进一个 Pipeline**：清洗、验证、去重、存储全写在一个 `process_item()` 里，代码又长又难维护。正确的做法是拆成多个 Pipeline，每个只做一件事，通过优先级串联。
+- **在 Pipeline 中直接 `open()` 文件而不处理异常**：如果文件写入过程中爬虫被中断，数据可能丢失或文件损坏。用 `close_spider()` 确保文件正确关闭，或改用数据库。
+- **忽略 Pipeline 的执行顺序**：优先级数字越小越先执行。如果把存储 Pipeline（500）排在验证 Pipeline（400）前面，不合格的数据也会被存进去。
+
+---
+
+## 工程建议
+
+- **Pipeline 拆分遵循"单一职责"原则**：CleanPipeline 只管清洗，ValidatePipeline 只管验证，SavePipeline 只管存储。这样任何一个环节出问题，都能快速定位和替换。
+- **开发阶段用 `LOG_LEVEL='DEBUG'` 观察 Pipeline 流转**：开启 DEBUG 日志，你能看到每个 Item 经过每个 Pipeline 的完整过程，排查问题事半功倍。
+- **批量写入代替逐条提交**：如果用数据库存储，不要每条 Item 都 `commit()` 一次。在 `process_item()` 中攒批，在 `close_spider()` 中一次性提交，性能提升显著。
+- **用 `None` 禁用 Pipeline 而不是注释代码**：在 `ITEM_PIPELINES` 中把优先级设为 `None` 即可禁用，比注释掉更干净，也方便通过环境变量动态切换。
 
 ---
 

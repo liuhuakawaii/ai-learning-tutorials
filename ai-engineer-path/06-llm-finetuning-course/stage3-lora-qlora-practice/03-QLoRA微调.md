@@ -2,6 +2,12 @@
 
 > QLoRA 让消费级硬件也能微调大模型。
 
+## 场景引入
+
+你有一张 RTX 3060 12GB，想微调一个 7B 模型。用普通 LoRA 加载模型就要 14GB 显存，直接 OOM。减 batch_size？减到 1 还是不够。用更小的模型？效果差太多。这时 QLoRA 出现了——它把模型量化到 4-bit 再加 LoRA，7B 模型只需 6GB 显存，你的 12GB 卡绰绰有余。但量化会不会影响效果？配置和普通 LoRA 有什么不同？
+
+---
+
 ## 学习目标
 
 - 掌握 QLoRA 的配置和使用方法
@@ -139,6 +145,30 @@ def compare_lora_qlora():
     print(f"QLoRA: {qlora_result}")
     # 通常差距在 1-2% 以内
 ```
+
+---
+
+## 常见误区
+
+1. **量化后忘记调用 prepare_model_for_kbit_training**：这是 QLoRA 必须的步骤，不调用会导致梯度计算错误。很多新手直接在量化模型上加 LoRA，训练时 Loss 不下降。
+
+2. **认为 QLoRA 效果一定差**：在大多数任务上，QLoRA 和 LoRA 的效果差距在 1-2% 以内。对于资源受限的场景，这点差距完全可以接受。
+
+3. **QLoRA 用 float32 计算**：QLoRA 的 `bnb_4bit_compute_dtype` 应该设为 `float16` 或 `bfloat16`，用 float32 会显著增加计算开销且不提升效果。
+
+4. **忽略双重量化**：`bnb_4bit_use_double_quant=True` 可以进一步减少显存占用（约节省 0.4GB/7B），几乎不影响质量，应该默认开启。
+
+---
+
+## 工程建议
+
+1. **QLoRA 是消费级硬件的首选**：RTX 3060 12GB 就能微调 7B 模型，RTX 4090 24GB 能微调 14B 模型。不需要 A100 也能做微调。
+
+2. **搭配 paged_adamw_8bit 优化器**：8-bit 优化器可以进一步减少优化器状态的显存占用，和 QLoRA 配合使用效果最佳。
+
+3. **gradient_checkpointing 必开**：QLoRA 场景下开启 gradient_checkpointing 可以额外节省 30-40% 的显存，代价是训练速度降低约 20%。
+
+4. **先用 QLoRA 验证再升级 LoRA**：如果不确定微调是否有效，先用 QLoRA 快速验证。确认方向正确后，再考虑是否升级到 LoRA 或全量微调。
 
 ---
 

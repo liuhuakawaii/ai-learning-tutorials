@@ -1,5 +1,9 @@
 # 第七课：RESTful API 设计
 
+## 场景引入
+
+前端同事找你抱怨："你这个 API 返回的数据格式一会儿是 `{ data: [...] }`，一会儿是 `{ users: [...] }`，我每次对接都要看文档才知道怎么解析。"另一个同事说："你的删除接口用的是 POST 方法，但按规范应该用 DELETE 啊。"这些混乱的根源是缺乏统一的 API 设计规范。RESTful 是目前最主流的 API 设计风格，它用资源的概念统一了 URL 结构、HTTP 方法和状态码的使用方式，让 API 自描述、可预测、易维护。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -1123,6 +1127,20 @@ function filterData(data, filters) {
 ```
 
 ---
+
+## 常见误区
+
+1. **URL 中使用动词**：RESTful 的核心是"资源"，URL 应该用名词（`/api/users`），而不是动词（`/api/getUsers`）。操作方式由 HTTP 方法决定——GET 获取、POST 创建、PUT 更新、DELETE 删除。
+2. **PUT 和 PATCH 混用**：PUT 是完整替换资源（所有字段都要传），PATCH 是部分更新（只传要改的字段）。如果用 PUT 更新时只传了一个字段，其他字段会被覆盖为默认值。
+3. **所有接口都返回 200 状态码**：创建成功应该返回 201，删除成功返回 204，资源不存在返回 404，参数错误返回 400。错误的状态码让前端无法通过 HTTP 层面判断请求结果。
+4. **在 URL 中暴露操作细节**：如 `/api/deleteUser/1` 或 `/api/posts/publish/1`。应该用 `DELETE /api/users/1` 和 `PATCH /api/posts/1 { status: 'published' }` 来表达。
+
+## 工程建议
+
+1. **统一响应格式**：所有 API 使用相同的响应结构 `{ success: boolean, data: any, error?: object }`，让前端可以写一个通用的响应处理函数。
+2. **分页、排序、过滤用查询参数**：`GET /api/posts?page=1&limit=10&sort=-createdAt&status=published`，不要为每种组合创建不同的 URL。
+3. **API 版本化**：在 URL 中加入版本号（`/api/v1/users`），当需要做破坏性变更时发布 v2，给旧客户端迁移时间。
+4. **用 HTTP 状态码表达语义，不要只用 200**：401 表示未认证、403 表示无权限、409 表示资源冲突、422 表示验证失败。前端可以根据状态码做不同的错误处理。
 
 ## 十、小结
 

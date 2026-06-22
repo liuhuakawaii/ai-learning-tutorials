@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你用 `docker compose up` 启动了项目，一切正常。但你发现前端容器访问后端 API 时用的是 `localhost:3000`，部署到服务器后就不行了——因为容器的 `localhost` 不是宿主机的 `localhost`。你开始困惑：容器之间到底怎么通信？网络是怎么隔离的？Volume 和 Bind Mount 有什么区别，什么时候该用哪个？
+
+---
+
 ## 学习目标
 
 1. 掌握 service 的完整配置选项
@@ -297,6 +303,24 @@ docker compose down
 docker compose up -d postgres
 docker compose exec postgres psql -U postgres -c "SELECT * FROM test;"
 ```
+
+---
+
+## 常见误区
+
+- **"所有服务都应该暴露端口到宿主机"**：只有需要从外部访问的服务（如 Web 前端、API 网关）才需要 `ports`。数据库、缓存等内部服务不需要暴露端口，通过容器网络访问更安全。
+- **"Bind Mount 比 Named Volume 好"**：两者用途不同。Bind Mount 适合开发时挂载源码，Named Volume 适合数据库等有状态服务。用错场景会导致数据丢失或性能问题。
+- **"Compose 自动创建的网络就够用了"**：默认网络支持基本通信，但无法实现网络隔离。生产环境应该用自定义网络，把前端和后端分开，限制不必要的访问。
+- **"container_name 可以随便起"**：Compose 中的 `container_name` 会覆盖自动生成的名称，在需要扩展（scale）服务时会导致冲突。除非有特殊需求，不要设置 `container_name`。
+
+---
+
+## 工程建议
+
+- **内部服务不要暴露端口**：PostgreSQL、Redis 等只通过容器网络通信，不映射到宿主机，减少攻击面。
+- **用 `restart: unless-stopped` 替代 `always`**：`always` 会在 Docker 守护进程重启后自动启动容器，包括你手动停止的。`unless-stopped` 更符合预期。
+- **配置日志轮转**：`logging` 配置 `max-size` 和 `max-file` 防止日志文件无限增长撑满磁盘。
+- **用 `deploy.resources.limits` 限制资源**：防止单个容器吃光 CPU 和内存，影响其他服务。
 
 ---
 

@@ -4,6 +4,10 @@
 > **前置知识**：了解 Lighthouse 和 CI/CD 基础
 > **预计时长**：30 分钟
 
+## 场景引入
+
+你的团队制定了性能规范，要求 Lighthouse 分数不低于 90 分。但实际执行中，只有少数人会记得在本地跑一次 Lighthouse——大多数人在提交代码后才发现分数不达标，修复成本已经很高了。更糟糕的是，有些退化在合并到主分支后才被发现，回滚又影响其他人的工作。你需要把 Lighthouse 检查自动化——每次 PR 自动运行，分数不达标时阻止合并，让性能检查成为开发流程的一部分。
+
 ---
 
 ## 学习目标
@@ -400,6 +404,20 @@ npx lhci server
 3. 测试断言的准确性
 
 ---
+
+## 常见误区
+
+1. **CI 中的断言一开始就是 error 级别**：如果项目性能基础较差，一开始就用 error 会导致所有 PR 都失败，团队无法正常开发。建议先用 warn 收集数据，稳定后再提升为 error。
+2. **只测一个页面**：不同页面的性能特征不同。只测首页可能忽略了详情页的性能问题。应该为关键页面都配置 Lighthouse 测试。
+3. **Lighthouse 分数波动导致 CI 不稳定**：Lighthouse 分数受网络、CPU 负载影响会有波动。配置 `numberOfRuns: 3` 取中位数，减少误报。
+4. **把 Lighthouse CI 当作唯一的性能门禁**：Lighthouse 是 Lab 数据，不完全反映真实用户体验。还需要配合线上 Web Vitals 采集，Lab + Field 结合才能全面监控。
+
+## 工程建议
+
+1. **从 warn 开始，逐步收紧**：第一周用 warn 收集基线数据，第二周分析哪些断言容易失败，第三周把稳定的断言提升为 error，给团队适应的时间。
+2. **为不同页面配置不同预算**：首页要求 LCP ≤ 2s（error），详情页要求 LCP ≤ 3s（warn），管理后台可以更宽松。用 `matrix` 配置按 URL 匹配不同断言。
+3. **上传报告到 CI Artifacts**：把 Lighthouse HTML 报告作为 CI Artifacts 保存，PR 中可以直接点击查看详细报告，方便 review 性能变化。
+4. **配合 Lighthouse CI GitHub App 自动生成 PR 评论**：安装 Lighthouse CI GitHub App 后，每次 PR 会自动评论 Lighthouse 分数变化，让 reviewer 一眼看到性能影响。
 
 ## 小结
 

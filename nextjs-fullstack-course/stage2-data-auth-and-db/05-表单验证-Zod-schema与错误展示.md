@@ -1,5 +1,9 @@
 # 第五课：表单验证 — Zod schema 与错误展示
 
+## 场景引入
+
+你的注册表单上线后，数据库里开始出现各种脏数据：邮箱字段存了 `"abc"` 这种无效格式，名字字段是空字符串，密码只有 1 位。你检查发现，前端只加了 `required` 属性，用户用 Postman 直接调 API 就能绕过所有验证。更糟糕的是，当用户输入不合法时，页面没有给出任何错误提示，表单只是"什么都不发生"。你需要一套统一的验证方案：同一个 Schema 既能用在前端提供即时反馈，又能用在后端确保数据安全，而且错误信息要清晰地展示在对应的字段旁边。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -682,6 +686,20 @@ const SearchSchema = z.object({
 ```
 
 ---
+
+## 常见误区
+
+1. **"前端验证够了，后端不需要再验证"**：前端验证可以被绕过（禁用 JS、用 Postman 直接调用）。服务端必须独立验证所有输入，不能信任前端传来的数据。
+2. **"用 if/else 手写验证就行"**：手写验证逻辑散落在各处，容易遗漏字段，也难以复用。Zod 可以在一个地方定义完整的验证规则，自动生成 TypeScript 类型，前端和后端共用。
+3. **"错误信息直接返回英文"**：Zod 默认的错误信息是英文的（如 "Expected string, received number"），需要通过 `.min(2, '至少 2 个字')` 自定义中文提示，否则用户体验很差。
+4. **"safeParse 和 parse 效果一样"**：`parse` 验证失败会抛出异常，`safeParse` 返回 `{ success, data/error }` 对象。在 Server Action 中应该用 `safeParse`，避免异常导致整个 action 崩溃。
+
+## 工程建议
+
+1. **把 Schema 定义在 `lib/schemas.ts` 中集中管理**：不要在每个 Server Action 中重复定义验证规则。集中的 Schema 文件方便维护和复用。
+2. **用 `flatten().fieldErrors` 展示字段级错误**：Zod 的 `error.flatten().fieldErrors` 返回 `{ fieldName: ['错误信息'] }` 结构，可以直接在表单中用 `state?.errors?.fieldName?.[0]` 展示。
+3. **客户端和服务端共用同一个 Schema**：React Hook Form + `zodResolver` 可以在客户端使用同一个 Zod Schema 做即时验证，确保前后端验证规则一致。
+4. **用 `z.coerce` 处理 URL 参数类型转换**：URL 参数都是字符串，`z.coerce.number()` 可以自动把字符串转为数字，避免 `parseInt` 的重复代码。
 
 ## 十、小结
 

@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你接手了一个 Node.js 项目，README 里写着"需要 Node 18 和 PostgreSQL 14"。你照着文档搭了半天环境，发现还缺 Redis、还有个 native 模块需要 Python 和 C++ 编译器。折腾了一下午终于跑起来了，隔壁新来的同事又问你同样的搭建步骤。你想：能不能写一个文件，描述清楚"这个项目需要什么环境"，然后一条命令就搞定？
+
+---
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -587,7 +593,7 @@ COPY . .
 
 ---
 
-## 六、常见错误和解决
+## 常见误区
 
 ### 6.1 COPY failed: file not found
 
@@ -682,6 +688,15 @@ docker run -d -p 3000:3000 express-demo
 docker build -t debug-app .
 docker run -it <last-successful-image-id> /bin/sh
 ```
+
+---
+
+## 工程建议
+
+- **始终用 `npm ci` 代替 `npm install`**：`npm ci` 严格按照 lock 文件安装，保证构建可重复，速度也更快。`npm install` 可能更新 lock 文件，导致不同时间构建出不同结果。
+- **为每个项目创建 `.dockerignore`**：即使项目很小，也应该有 `.dockerignore`。至少排除 `node_modules`、`.git`、`.env`，防止敏感信息泄露和构建缓慢。
+- **用非 root 用户运行容器**：在 Dockerfile 中用 `USER` 指令切换到非 root 用户，这是生产环境的基本安全要求。
+- **构建时用 `--no-cache` 调试**：当你怀疑缓存导致问题时，用 `docker build --no-cache` 重新全量构建，确认问题是否出在缓存上。
 
 ---
 

@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你用 Docker 跑了一个 PostgreSQL，往里灌了几个 GB 的测试数据，项目跑得很顺利。某天你需要升级 PostgreSQL 版本，`docker rm` 旧容器、`docker run` 新容器——数据全没了。你开始慌了：容器不是应该很方便吗？数据到底存在哪里？怎么才能让数据在容器重建后还在？更进一步，你的 Node.js 应用怎么连接到数据库容器？
+
+---
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -393,6 +399,24 @@ docker run --rm --network demo-net node:18-alpine \
 docker rm -f redis
 docker network rm demo-net
 ```
+
+---
+
+## 常见误区
+
+- **"容器重启数据就没了"**：容器重启（`docker restart`）数据不会丢，数据在容器的可写层。只有 `docker rm` 删除容器后，可写层的数据才会丢失。用 Volume 持久化就能解决。
+- **"Bind Mount 和 Named Volume 一样"**：Bind Mount 直接映射宿主机目录，适合开发时挂载源码；Named Volume 由 Docker 管理，适合数据库等有状态服务。两者用途不同，不能混用。
+- **"容器间通信用 localhost"**：每个容器有自己的网络命名空间，`localhost` 指向容器自身。容器间通信应该用 Docker 网络 + 服务名（如 `postgres:5432`）。
+- **"端口映射是容器间通信的方式"**：`-p` 端口映射是让宿主机访问容器的方式，不是容器之间通信用的。容器间通信通过 Docker 自定义网络实现。
+
+---
+
+## 工程建议
+
+- **数据库必须用 Named Volume**：任何有状态服务（数据库、缓存、文件存储）都应该挂载 Named Volume，不要把数据存在容器可写层。
+- **开发时用 Bind Mount 挂载源码**：配合 nodemon、Vite HMR 等工具，实现代码热更新，开发体验和不用 Docker 一样。
+- **为不同环境创建不同的网络**：开发、测试、生产环境用不同的 Docker 网络，避免意外的跨环境通信。
+- **node_modules 不要 Bind Mount**：本地是 macOS/Windows，容器是 Linux，原生模块编译结果不同。让容器内自己 `npm install`，或用 Named Volume 缓存 node_modules。
 
 ---
 

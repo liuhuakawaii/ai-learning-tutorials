@@ -1,5 +1,9 @@
 # 第二课：环境搭建与 npm
 
+## 场景引入
+
+你接手了一个 Node.js 项目，clone 代码后执行 `npm install`，发现报错"node 版本不兼容"。你本地装的是 v16，但项目要求 v18+。卸载重装？太麻烦。同事告诉你用 nvm 可以一键切换版本。安装完依赖后，你又发现 `package.json` 里有 `dependencies` 和 `devDependencies` 两栏，`package-lock.json` 的作用也不太清楚。这些环境和包管理的问题，是每个 Node.js 开发者的第一道门槛。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -890,6 +894,20 @@ npx npm-info express
 ```
 
 ---
+
+## 常见误区
+
+1. **把 node_modules 提交到 Git**：node_modules 可能包含几百 MB 的文件，且可以通过 `npm install` 重新生成。正确做法是在 `.gitignore` 中添加 `node_modules/`，只提交 `package.json` 和 `package-lock.json`。
+2. **全局安装项目依赖**：`npm install -g` 用于安装全局 CLI 工具（如 nodemon），项目依赖应该用 `npm install` 安装到本地 `node_modules`，否则不同项目可能产生版本冲突。
+3. **手动修改 package-lock.json**：lock 文件由 npm 自动生成和维护，手动修改可能导致依赖树不一致。如果需要更新依赖，使用 `npm update` 或 `npm install`。
+4. **忽略 devDependencies 和 dependencies 的区分**：将开发工具（如 eslint、jest）放入 dependencies，会导致生产环境安装不必要的包，增大部署体积和安全风险。
+
+## 工程建议
+
+1. **始终使用 nvm 管理 Node.js 版本**：在项目根目录创建 `.nvmrc` 文件写入版本号（如 `20`），团队成员执行 `nvm use` 即可切换到正确版本。
+2. **使用 `npm ci` 替代 `npm install` 进行部署**：`npm ci` 严格按照 `package-lock.json` 安装，速度更快且保证环境一致性，适合 CI/CD 和生产部署。
+3. **配置 .npmrc 文件统一团队镜像源**：在项目根目录创建 `.npmrc`，写入 `registry=https://registry.npmmirror.com`，避免团队成员各自配置不同的镜像。
+4. **定期审计依赖安全性**：运行 `npm audit` 检查项目依赖是否有已知漏洞，及时更新有安全风险的包。
 
 ## 十、小结
 

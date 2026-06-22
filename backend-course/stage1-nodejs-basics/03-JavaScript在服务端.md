@@ -1,5 +1,9 @@
 # 第三课：JavaScript 在服务端
 
+## 场景引入
+
+你在前端项目里用 `import` 导入模块，用 `document.getElementById` 操作 DOM，用 `localStorage` 存数据。但当你把同样的代码放到 Node.js 里运行，却报错 `document is not defined`。为什么同一门语言，在不同环境里行为完全不同？这是因为 JavaScript 的运行环境决定了它能访问哪些 API。浏览器有 DOM、BOM、Web API，而 Node.js 有 fs、http、path 等内置模块。理解这些差异，是写好后端代码的前提。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -1144,6 +1148,20 @@ console.log(c2.getCount());   // ?
 ```
 
 ---
+
+## 常见误区
+
+1. **混淆 exports 和 module.exports**：`exports` 只是 `module.exports` 的引用。给 `exports` 添加属性（`exports.foo = bar`）是正确的，但直接赋值（`exports = {}`）会断开引用，导致导出为空。
+2. **在 ES Modules 中使用 __dirname**：ES Modules 中没有 `__dirname` 和 `__filename`，需要通过 `import.meta.url` 配合 `fileURLToPath` 自己构造。
+3. **认为 CommonJS 的 require 是异步的**：`require()` 是同步操作，会阻塞后续代码执行。这在服务器端没问题（文件在本地，读取快），但不要在高频调用的热路径中使用动态 require。
+4. **在模块作用域中声明的变量以为是全局的**：Node.js 中每个文件都是一个模块，模块内的变量是私有的。只有挂载到 `global` 对象上的属性才是全局的（不推荐这样做）。
+
+## 工程建议
+
+1. **新项目优先使用 ES Modules**：在 `package.json` 中设置 `"type": "module"`，使用 `import/export` 语法。ES Modules 是标准，支持 Tree Shaking，生态趋势明确。
+2. **用 path.join 处理所有路径拼接**：不要用字符串拼接（`__dirname + '/config'`），Windows 和 Mac 的路径分隔符不同，`path.join` 会自动处理跨平台兼容。
+3. **环境变量统一用 .env 文件管理**：安装 `dotenv` 包，在项目根目录创建 `.env` 文件，通过 `process.env` 读取。不要在代码中硬编码数据库密码等敏感信息。
+4. **优雅处理进程退出**：监听 `SIGTERM` 和 `SIGINT` 信号，在退出前关闭数据库连接、释放资源，避免数据丢失或连接泄漏。
 
 ## 十、小结
 

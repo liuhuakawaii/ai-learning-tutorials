@@ -1,5 +1,9 @@
 # 第三课：Server Components 与 Client Components
 
+## 场景引入
+
+你在做一个内容管理系统的文章详情页，页面需要展示文章内容（来自数据库）、评论列表（来自另一个 API）和一个点赞按钮。你本能地给整个页面加了 `'use client'`，然后在 `useEffect` 里分别调用两个接口获取数据。结果发现：页面加载时先白屏，然后两个接口串行请求，最后才渲染出内容。更糟的是，`date-fns` 和 `lodash` 这些只在服务端才需要的库也被打包进了客户端 bundle，JS 体积暴涨。你需要理解 Server Components 和 Client Components 的边界在哪里，才能做出正确的架构选择。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -409,7 +413,7 @@ export default function ClientButton() {
 
 ---
 
-## 六、常见错误与解决
+## 常见误区
 
 ### 6.1 错误：在 Server Component 中使用 useState
 
@@ -471,6 +475,13 @@ export default function Card({ children }) {
   <ServerBody />
 </Card>
 ```
+
+## 工程建议
+
+1. **把 `'use client'` 边界推到组件树的最底层**：不要给整个页面加 `'use client'`，只在真正需要交互的叶子组件上标记。这样服务端的库（如 Prisma、date-fns）不会被打包进客户端。
+2. **用 children 模式组合 Server 和 Client Component**：Client Component 可以通过 `children` prop 接收 Server Component，这是 Next.js 推荐的组合模式。不要尝试把 Server Component 作为普通 prop 传递。
+3. **数据获取放在 Server Component，交互逻辑放在 Client Component**：Server Component 负责查数据库、调用内部 API、格式化数据；Client Component 负责处理用户输入、动画、浏览器 API。
+4. **避免在 Server Component 中导入不必要的客户端依赖**：如果你的组件树中某个子组件需要 `'use client'`，确保它的父级不会因为导入链而被拖入客户端 bundle。
 
 ---
 

@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你本地 `docker build` 构建镜像只要 30 秒，但在 GitHub Actions 里要 5 分钟——因为 CI 环境没有缓存，每次都要从头构建。更头疼的是，你用的是 M1 MacBook（arm64），但 CI 跑在 x86 服务器上，构建出来的镜像在服务器上跑不了。怎么解决缓存和跨平台的问题？
+
+---
+
 ## 学习目标
 
 1. 在 GitHub Actions 中构建 Docker 镜像
@@ -255,6 +261,24 @@ permissions:
 
 # 登录并推送到 ghcr.io
 ```
+
+---
+
+## 常见误区
+
+- **"CI 里直接 docker build 就行了"**：直接用 `docker build` 没有缓存，每次从头构建。应该用 Docker Buildx + GHA 缓存后端，复用之前的构建层。
+- **"latest 标签就是最新版"**：`latest` 只是默认标签，不代表最新。应该用语义化版本（`v1.2.3`）或 Git SHA 作为标签，方便追溯和回滚。
+- **"多平台构建很复杂"**：Docker Buildx + QEMU 让多平台构建变得简单，只需要 `platforms: linux/amd64,linux/arm64` 一行配置。
+- **"Docker Hub 和 GHCR 差不多"**：GHCR（GitHub Container Registry）和 GitHub 仓库无缝集成，用 `GITHUB_TOKEN` 就能认证，不需要额外配置 Secrets。公开仓库的 GHCR 也免费。
+
+---
+
+## 工程建议
+
+- **用 `docker/build-push-action` 而不是手动 `docker build`**：官方 Action 支持缓存、多平台、自动标签，比手写命令更可靠。
+- **用 `docker/metadata-action` 自动生成标签**：根据分支名、标签、Git SHA 自动生成镜像标签，减少手动配置错误。
+- **构建时 `push: false` 用于测试**：PR 时只构建不推送，验证 Dockerfile 是否正确，合并到 main 后再推送。
+- **配置 Docker Hub Access Token**：不要用密码登录 Docker Hub，用 Personal Access Token，权限更细、更安全。
 
 ---
 

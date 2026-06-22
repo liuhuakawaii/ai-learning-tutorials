@@ -8,57 +8,100 @@ datasource db {
 }
 
 model User {
-  id        String       @id @default(cuid())
-  email     String       @unique
-  name      String?
-  createdAt DateTime     @default(now())
-  members   TeamMember[]
-  auditLogs AuditLog[]
+  id             String       @id @default(cuid())
+  email          String       @unique
+  name           String?
+  hashedPassword String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  members        TeamMember[]
+  auditLogs      AuditLog[]
 }
 
 model Team {
-  id        String       @id @default(cuid())
-  name      String
-  createdAt DateTime     @default(now())
-  members   TeamMember[]
-  projects  Project[]
+  id            String       @id @default(cuid())
+  name          String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  members       TeamMember[]
+  projects      Project[]
+  subscriptions Subscription[]
 }
 
 model TeamMember {
-  id     String @id @default(cuid())
-  role   Role
-  user   User   @relation(fields: [userId], references: [id])
-  userId String
-  team   Team   @relation(fields: [teamId], references: [id])
-  teamId String
+  id        String   @id @default(cuid())
+  role      Role     @default(member)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String
+  createdAt DateTime @default(now())
 
   @@unique([userId, teamId])
+  @@index([teamId])
 }
 
 model Project {
   id        String   @id @default(cuid())
   name      String
   status    String   @default("draft")
-  team      Team     @relation(fields: [teamId], references: [id])
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   teamId    String
   documents Document[]
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([status])
 }
 
 model Document {
   id        String   @id @default(cuid())
   title     String
-  project   Project  @relation(fields: [projectId], references: [id])
+  content   String?
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectId String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
 }
 
 model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  targetType String?
+  targetId   String?
+  metadata   String?
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  actorId    String
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model Plan {
+  id             String       @id @default(cuid())
+  name           String       @unique
+  priceMonthly   Int
+  projectLimit   Int
+  documentLimit  Int
+  createdAt      DateTime     @default(now())
+  subscriptions  Subscription[]
+}
+
+model Subscription {
   id        String   @id @default(cuid())
-  action    String
-  actor     User     @relation(fields: [actorId], references: [id])
-  actorId   String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String
+  plan      Plan     @relation(fields: [planId], references: [id])
+  planId    String
+  status    String   @default("active")
   createdAt DateTime @default(now())
+  expiresAt DateTime?
+
+  @@unique([teamId])
 }
 
 enum Role {

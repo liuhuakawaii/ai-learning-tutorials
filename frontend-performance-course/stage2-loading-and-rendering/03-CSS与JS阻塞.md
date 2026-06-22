@@ -4,6 +4,10 @@
 > **前置知识**：了解关键渲染路径（CRP）
 > **预计时长**：35 分钟
 
+## 场景引入
+
+你的项目在 `<head>` 中引入了 5 个 JS 文件：jQuery、Lodash、一个工具库、一个分析脚本和应用主脚本。Lighthouse 报告显示 FCP 高达 3.2 秒，原因是"Eliminate render-blocking resources"。你把所有 script 标签加上 defer，FCP 立刻降到 1.1 秒。但上了一个新需求后，发现某些页面功能失效了——因为 defer 脚本的执行顺序和你预期的不同。理解 CSS 和 JS 的阻塞机制，不只是知道"加 defer"，更要理解什么场景用 defer、什么场景用 async、什么场景必须同步。
+
 ---
 
 ## 学习目标
@@ -202,6 +206,20 @@ module.exports = {
 3. 尝试将首屏 CSS 内联
 
 ---
+
+## 常见误区
+
+1. **给所有 script 标签无脑加 defer**：有些脚本需要同步执行（如内联的环境变量注入脚本），加 defer 反而导致后续代码拿不到变量。要理解每个脚本的依赖关系再决定加载策略。
+2. **把内联关键 CSS 理解为"把所有 CSS 内联"**：关键 CSS 应该只包含首屏必需的样式（< 10KB），把整个 CSS 文件内联会导致 HTML 膨胀，反而拖慢首次字节到达时间。
+3. **认为 async 脚本一定比 defer 快**：async 脚本下载完立即执行，可能在 DOM 还没解析完时就执行了。如果脚本依赖 DOM，反而会报错。速度不是唯一考量，正确性更重要。
+4. **忽略 CSS 的阻塞链路**：一个外部 CSS 文件阻塞渲染 → 渲染阻塞意味着 FCP 延迟 → FCP 延迟意味着 LCP 也可能延迟。CSS 阻塞的影响是连锁的。
+
+## 工程建议
+
+1. **用 media 属性拆分 CSS**：打印样式用 `media="print"`，大屏样式用 `media="(min-width: 1024px)"`，这些非匹配的 CSS 不会阻塞渲染。
+2. **使用 critters 工具自动提取关键 CSS**：Webpack 项目可以用 critters 插件，构建时自动提取首屏 CSS 并内联。
+3. **第三方分析脚本用 async**：Google Analytics、百度统计等脚本不依赖 DOM 且不需要特定执行顺序，用 async 最合适。
+4. **用 Coverage 面板量化"浪费"的代码**：Chrome DevTools → More tools → Coverage，可以看到每个文件的关键字节占比，指导代码拆分。
 
 ## 小结
 

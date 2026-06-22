@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你已经能用 Scrapy 爬一个简单的列表页了，但真实项目远没这么友好。电商网站要先爬分类页，再进列表页，最后到详情页——三层跳转，每一层都要传递上下文数据。更烦的是，你用字典 yield 数据，字段名拼错了都不知道，直到导出 CSV 才发现"priec"那一列全是空的。你开始意识到：爬虫不只是"提取数据"，还得把数据结构管好、把页面跳转理清。
+
+---
+
 完成本课学习后，你将能够：
 
 1. 掌握 Spider 类的核心属性：`name`、`allowed_domains`、`start_urls`、`parse()`
@@ -567,6 +573,24 @@ scrapy crawl books -o books.csv     # 输出到 CSV
 2. 配置处理器：`title_in = MapCompose(str.strip)`，`price_in = MapCompose(str.strip, extract_number)`
 3. 在 Spider 中用 ItemLoader 替代手动赋值
 4. 对比使用前后的代码量差异
+
+---
+
+## 常见误区
+
+- **`allowed_domains` 加 http:// 前缀或路径**：这是新手最常犯的错。`allowed_domains` 只接受纯域名（如 `books.toscrape.com`），加了 `http://` 或 `/catalogue` 会导致所有请求被过滤，爬虫什么都不爬。
+- **在 `parse()` 里用 `return` 代替 `yield`**：`return` 只能返回一次，返回后函数就结束了，无法同时处理翻页。`yield` 是生成器，可以逐条返回 Item 和 Request，引擎自动分发。
+- **直接 yield 字典而不定义 Item**：小项目没问题，但字段一多就容易拼写错误（字典不会报错，Item 会抛 KeyError）。项目超过 10 个字段时，强烈建议用 Item。
+- **忘记 `meta` 传递上下文**：列表页到详情页跳转时，有些数据（如分类名）只在列表页有，如果不通过 `meta` 传过去，详情页就拿不到。
+
+---
+
+## 工程建议
+
+- **优先使用 `response.follow()` 而非 `scrapy.Request()`**：`response.follow()` 自动处理相对路径转绝对路径，减少 `response.urljoin()` 的样板代码。
+- **用 ItemLoader 简化数据清洗**：当提取逻辑包含去空格、正则匹配、类型转换时，ItemLoader 的 Processor 链比手动 `strip()` + `re.search()` 更清晰、更可维护。
+- **回调函数命名要有业务语义**：不要写 `parse1`、`parse2`，而是 `parse_category`、`parse_detail`。三个月后回来看代码，你还能秒懂每个回调在干什么。
+- **errback 不要省略**：生产环境中，网络异常是常态。给每个 `Request` 加上 `errback=self.handle_error`，至少记录一下失败的 URL 和原因，方便排查。
 
 ---
 

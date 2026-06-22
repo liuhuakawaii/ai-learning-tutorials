@@ -4,6 +4,10 @@
 > **前置知识**：了解 Core Web Vitals，会使用 Chrome DevTools
 > **预计时长**：35 分钟
 
+## 场景引入
+
+你的团队要求每次 PR 合并前 Lighthouse Performance 得分必须 ≥ 90。你花了一天优化，终于跑到了 92 分，PR 顺利合并。但上线后用户反馈页面依然很慢。仔细一看报告才发现：你只看了分数，没看 Opportunities 部分里"Serve images in next-gen formats"预计能节省 2.1 秒——3MB 的 PNG 图片从未压缩过。Lighthouse 报告的价值不在分数本身，而在报告中那些具体的、可操作的优化建议。
+
 ---
 
 ## 学习目标
@@ -333,6 +337,20 @@ lighthouse https://example.com --only-categories=performance
 ```
 
 ---
+
+## 常见误区
+
+1. **只看分数不看 Opportunities**：Lighthouse 最有价值的部分是 Opportunities（优化机会），它按预计节省时间排序，告诉你具体该优化什么。分数只是一个摘要。
+2. **只跑一次就下结论**：Lighthouse 每次运行结果可能不同，受网络、CPU、服务器状态影响。应该多次运行取中位数，或者用 Lighthouse CI 的 Median 计算。
+3. **追求 100 分满分**：从 90 分到 100 分的投入产出比极低，可能需要花大量时间处理微小的优化。把精力放在 Opportunities 中节省时间最多的项目上。
+4. **用 Lighthouse Mobile 分数代替真实移动体验**：Lighthouse 的 CPU 节流是模拟，不是真实降速。真实低端设备的性能可能比 Lighthouse 模拟的更差。
+
+## 工程建议
+
+1. **优先处理 Estimated Savings 最大的 Opportunities**：这些是投入产出比最高的优化项，通常能带来秒级的性能提升。
+2. **在 CI 中集成 Lighthouse CI**：设定 Performance 得分阈值（如 ≥ 80），PR 不达标时自动阻断合并。
+3. **同时测试 Mobile 和 Desktop**：两个模式的得分差距通常很大，Mobile 模式更能暴露性能问题。
+4. **关注 Diagnostics 中的 JavaScript execution time**：如果 JS 执行时间过长，说明有长任务需要拆分，这直接影响 INP。
 
 ## 动手练习
 

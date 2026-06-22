@@ -2,6 +2,12 @@
 
 > 将 MCP Tool 集成到你的 Agent 系统中，让 Agent 能够使用任何 MCP 工具。
 
+## 场景引入
+
+你用 LangGraph 搭建了一个 AI Agent，它能推理、规划、执行任务。现在你想让它能调用 MCP Server 提供的工具——数据库查询、文件操作、API 调用。但 LangGraph 的 Tool 格式和 MCP 的 Tool 格式不一样，你需要一个适配层把 MCP Tool 转换成 LangGraph 能理解的格式。更复杂的是，Agent 需要同时连接多个 MCP Server，工具列表可能有几百个，怎么让 AI 从几百个工具中选对？
+
+---
+
 ## 学习目标
 
 - 掌握将 MCP Tool 集成到 Agent 的方法
@@ -138,12 +144,51 @@ class MultiServerAgent:
         raise ToolNotFoundError(f"工具 {tool_name} 未找到")
 ```
 
+## 常见误区
+
+```
+误区 1：直接把 MCP Tool 原样传给 LLM
+  不同框架的 Tool 格式不同（LangGraph 用 @tool 装饰器，OpenAI 用 function 格式）。
+  必须做格式转换，不能直接传递。
+
+误区 2：工具越多 Agent 越强大
+  工具太多反而会降低 Agent 的选择准确率。
+  按任务类型动态加载相关工具，比一次性加载所有工具效果更好。
+
+误区 3：Agent 集成只需要转换 Tool 格式
+  还要考虑：工具调用的权限控制、调用结果的缓存、失败时的降级策略。
+  格式转换只是最表层的工作。
+
+误区 4：一个 Agent 只需要一个 MCP Client
+  实际项目中，Agent 通常连接多个 MCP Server（数据库、文件、API 各一个）。
+  每个 Server 用独立的 Client，由统一的 Manager 协调。
+```
+
+---
+
+## 工程建议
+
+```
+1. 适配器模式隔离框架依赖
+  写一个 MCPToolAdapter，把 MCP Tool 转换为目标框架的格式。
+  框架升级或切换时，只需要改适配器，不影响 MCP Client。
+
+2. 工具列表按任务类型过滤
+  Agent 执行"数据分析"任务时，只加载数据库相关的 Tool。
+  执行"文件处理"任务时，只加载文件系统的 Tool。
+
+3. 工具调用结果要缓存
+  相同参数的查询 Tool 调用，结果应该缓存一段时间。
+  避免 Agent 在推理过程中重复调用同一个 Tool。
+
+4. 失败时给 Agent 有用的错误信息
+  "数据库连接超时，建议稍后重试"比"Error"有用得多。
+  Agent 可以根据错误信息决定重试、换工具还是告知用户。
+```
+
 ---
 
 ## 小结
-
-```
-本课核心要点：
 
 1. MCP Tool 可以集成到 LangGraph 和 OpenAI Agents SDK
 2. 适配器模式将 MCP 工具转换为框架格式

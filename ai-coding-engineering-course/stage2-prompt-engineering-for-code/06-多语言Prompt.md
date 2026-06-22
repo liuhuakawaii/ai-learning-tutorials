@@ -8,6 +8,12 @@
 
 ---
 
+## 场景引入
+
+你的项目是 TypeScript 前端 + Python 数据处理后端。你让 AI 写一个数据分析功能，AI 在 TypeScript 端生成了 Express 风格的代码（但你用的是 Next.js），在 Python 端返回了 `{ user_id: int }`（但 TypeScript 端期望 `{ userId: string }`）。两端的错误格式也不统一——TypeScript 端用 `{ error: { code, message } }`，Python 端返回 `{ detail: string }`。前端拿到数据后类型报错，错误处理也要写两套。多语言场景下，语言边界不清和数据契约不一致是最常见的坑。
+
+---
+
 ## 学习目标
 
 完成本课后，你将能够：
@@ -763,7 +769,7 @@ interface AnalysisResponse {
 
 ---
 
-## 6. 常见错误
+## 6. 常见误区
 
 ### ❌ 错误 1：语言边界不清晰
 
@@ -815,7 +821,19 @@ Python 端返回 { detail: string }
 
 ---
 
-## 7. 总结
+## 7. 工程建议
+
+1. **先定义数据契约再写代码**：在多语言 Prompt 中，先用 TypeScript interface 或 JSON Schema 定义 API 的请求/响应格式，再分别让 AI 生成 TypeScript 和 Python 端代码。数据契约是两端的"翻译基准"。
+
+2. **用明确的语言标记分隔 Prompt**：在 Prompt 中用 `[TypeScript]`、`[Python]`、`[SQL]` 等标记划分不同语言的描述段落，避免 AI 在语言间混淆。每个标记下只描述该语言的职责和约束。
+
+3. **简单 CRUD 用 ORM，复杂查询用原生 SQL**：不要所有查询都用原生 SQL，也不要所有查询都用 ORM。制定明确的决策规则：标准增删改查用 ORM，涉及窗口函数、递归查询、复杂聚合的用原生 SQL + `$queryRaw`。
+
+4. **统一错误响应格式**：无论后端用什么语言，对外暴露的 API 错误格式应该统一。可以在网关层（如 Next.js API Route）做格式转换，让前端只需处理一种错误结构。
+
+---
+
+## 8. 总结
 
 ```
 多语言 Prompt 的核心策略：
@@ -843,7 +861,7 @@ Python 端返回 { detail: string }
 
 ---
 
-## 8. 动手练习
+## 9. 动手练习
 
 ### 练习 1：全栈功能 Prompt
 

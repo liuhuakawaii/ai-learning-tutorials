@@ -10,6 +10,10 @@
 
 ---
 
+## 场景引入
+
+你已经设计了 RAG 评估体系，但手动计算 Recall@K、编写 LLM 评估 Prompt、汇总评估结果的工作量巨大——每次改一个参数就要花半天跑评估。RAGAS（RAG Assessment）是一个开源的 RAG 评估框架，它把 Faithfulness、Answer Relevance、Context Precision、Context Recall 四大核心指标封装成了开箱即用的工具。用 RAGAS，你可以在几分钟内完成一次完整的 RAG 质量评估，而不是几天。
+
 ## 1. RAGAS 简介
 
 RAGAS (Retrieval Augmented Generation Assessment) 是专门为 RAG 系统设计的评估框架。
@@ -879,7 +883,7 @@ def estimate_cost(dataset_size: int, num_metrics: int = 4) -> Dict[str, Any]:
 
 ---
 
-## 8. 常见错误
+## 8. 常见误区
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -911,7 +915,16 @@ def estimate_cost(dataset_size: int, num_metrics: int = 4) -> Dict[str, Any]:
 
 ---
 
-## 9. 总结
+## 9. 工程建议
+
+1. **RAGAS 评估数据集的质量决定评估结果**：RAGAS 依赖 ground truth 答案来计算指标。如果你的 ground truth 本身不准确，评估结果就毫无意义。建议先人工审核数据集质量。
+2. **四大指标要结合业务场景解读**：Faithfulness 高但 Answer Relevance 低，说明系统回答得很忠实但答非所问。不同业务场景对各指标的权重不同，要根据实际需求调整关注重点。
+3. **批量评估时注意 API 限流**：RAGAS 的 LLM-based 指标需要调用 LLM API，大规模评估时容易触发限流。建议设置合理的并发控制和重试机制。
+4. **定期用 RAGAS 做回归测试**：每次配置变更或模型升级后，用同一份评估数据集跑 RAGAS，对比前后指标变化。这比凭直觉判断"变好了"更可靠。
+
+---
+
+## 10. 总结
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -934,7 +947,7 @@ def estimate_cost(dataset_size: int, num_metrics: int = 4) -> Dict[str, Any]:
 
 ---
 
-## 10. 练习
+## 11. 练习
 
 ### 练习 1: RAGAS 基础评估 (基础)
 使用 RAGAS 对你的 RAG 系统进行评估:

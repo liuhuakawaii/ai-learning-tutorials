@@ -6,6 +6,14 @@
 
 ---
 
+## 场景引入
+
+你已经学会了用 DevTools 分析 HTTP 请求，知道了请求头、状态码、Content-Type 这些概念。现在你想用 Python 代码自动发送请求，把网页数据抓下来。但问题是：Python 标准库的 urllib 用起来又臭又长，光发一个 GET 请求就要写五六行代码，还得手动处理编码、超时、异常。
+
+你需要一个更好用的工具。requests 库就是答案——它把复杂的 HTTP 操作封装成了简洁直观的 API，一行代码就能发请求，两行代码就能拿到数据。接下来我们就用它发出第一个爬虫请求。
+
+---
+
 完成本课学习后，你将能够：
 
 1. 安装并导入 requests 库
@@ -575,6 +583,24 @@ with requests.Session() as session:
     r = session.get("https://httpbin.org/cookies")
     print(r.json())  # 期望输出：{'cookies': {'token': 'abc123'}}
 ```
+
+---
+
+## 常见误区
+
+- **用 `data=` 参数发送 JSON 数据。** `data=` 发送的是表单格式（application/x-www-form-urlencoded），要发 JSON 必须用 `json=` 参数，否则服务器可能解析失败。
+- **不设置 timeout 就发请求。** 不设超时意味着网络异常时程序会无限卡死。生产环境中每个请求都必须设置 timeout，这是最基本的安全措施。
+- **用 `response.text` 处理所有响应。** `response.text` 适合 HTML 和纯文本，但处理图片等二进制数据会乱码；API 返回的 JSON 用 `.json()` 更直接。根据 Content-Type 选择正确的读取方式。
+- **每次都用 `requests.get()` 而不用 Session。** 没有 Session，每次请求都是独立的连接，Cookie 不会自动保持，TCP 连接也无法复用。需要登录态或多页采集时必须用 Session。
+
+---
+
+## 工程建议
+
+- **优先使用 `params` 而非手动拼接 URL。** 手动拼 URL 容易遗漏编码问题，`requests` 的 `params` 参数会自动处理特殊字符编码，更安全也更可读。
+- **为每个请求设置 `timeout=(连接超时, 读取超时)`。** 推荐分别设置连接超时和读取超时，比如 `timeout=(3, 10)`，这样连接建立失败和响应读取慢可以分开控制。
+- **用 Session 管理所有请求。** 即使不需要登录态，Session 也能复用 TCP 连接（keep-alive），提高批量请求的速度。用 `with requests.Session()` 确保资源自动释放。
+- **统一异常处理，不要在每个请求处都写 try/except。** 封装一个通用的请求函数（如 `safe_get`），集中处理超时、连接失败、HTTP 错误等异常，保持业务代码简洁。
 
 ---
 

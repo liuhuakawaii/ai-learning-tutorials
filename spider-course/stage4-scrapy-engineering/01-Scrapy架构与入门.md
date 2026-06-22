@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你之前用 requests + BeautifulSoup 写了几个爬虫脚本，跑得也还行。但当产品经理说"把这 50 个商品页的数据全部抓下来"，你发现自己要手动管并发、写重试、处理异常、存数据，每个脚本都在重复同样的脏活。代码越写越长，bug 越来越多，维护起来像在补一件千疮百孔的衣服。这时候你开始想：有没有一个框架，把这些通用的东西都封装好，让我只专注于"爬什么、怎么解析"？
+
+---
+
 完成本课学习后，你将能够：
 
 1. 理解 Scrapy 是什么，以及它解决了哪些手工爬虫的痛点
@@ -560,6 +566,24 @@ scrapy crawl quotes -o quotes.json
 2. 使用 `yield response.follow()` 请求下一页
 3. 让 `callback` 指向 `self.parse` 实现循环
 4. 运行爬虫，确认爬取了所有页面的数据（共 100 条名言）
+
+---
+
+## 常见误区
+
+- **一上来就学 CrawlSpider**：初学者觉得 CrawlSpider "自动跟进链接"很酷，但它的 Rule 配置一旦出错很难调试。先掌握 `scrapy.Spider`，能手动控制一切之后再考虑 CrawlSpider。
+- **把 `start_urls` 当成唯一入口**：`start_urls` 只是 `start_requests()` 的快捷写法。当你需要 POST 请求、带 Cookie、或动态生成 URL 时，应该重写 `start_requests()` 方法。
+- **在 Spider 里写保存逻辑**：有人在 `parse()` 方法里直接 `open()` 文件写数据。这违反了关注点分离原则——Spider 只管解析，存储交给 Pipeline。
+- **忽略 settings.py 的配置**：默认的 `CONCURRENT_REQUESTS=16` 和 `DOWNLOAD_DELAY=0` 对真实网站来说太激进，不改配置直接跑等于对目标站点发起 DDoS。
+
+---
+
+## 工程建议
+
+- **先用 Scrapy Shell 验证选择器，再写代码**：在 Shell 里把 CSS/XPath 调通，确认能正确提取数据后，再搬到 Spider 文件里。这比反复运行整个爬虫调试效率高 10 倍。
+- **从一开始就遵守 robots.txt**：设置 `ROBOTSTXT_OBEY = True`，这是底线。如果目标站点明确禁止爬取，应该申请授权或改用官方 API，而不是绕过限制。
+- **给项目起一个有意义的 BOT_NAME**：不要用默认的 `myspider`，改成能体现项目用途的名字（如 `price_monitor`），方便日志排查和多项目管理。
+- **养成看日志的习惯**：Scrapy 的日志系统非常完善，运行结束后关注 `item_scraped_count`、`retry/max_retries`、`response_status_count` 等统计项，能帮你快速定位问题。
 
 ---
 

@@ -1,5 +1,9 @@
 # 第五课：Server Actions 与表单提交
 
+## 场景引入
+
+你在做一个博客平台的文章创建功能。传统的做法是：前端收集表单数据，调用 `fetch('/api/posts', { method: 'POST' })`，后端再处理。你需要写 API Route、构造请求对象、处理 CORS、解析响应、管理 loading 状态……一个简单的创建文章功能，代码分散在三个文件里。更烦人的是，每次提交后你还得手动调用 `router.refresh()` 来刷新列表，否则新文章不会出现在页面上。你开始想：有没有一种方式，让表单提交像调用本地函数一样简单？
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -603,6 +607,20 @@ export function LikeButton({ postId, initialLikes }) {
 ```
 
 ---
+
+## 常见误区
+
+1. **"Server Actions 是安全的，不需要验证输入"**：虽然 Server Actions 在服务端执行，但 Next.js 会把它们暴露为 HTTP 端点，任何人都可以构造请求调用。必须像对待普通 API 一样验证输入、检查权限。
+2. **"useFormStatus 可以放在表单的任何位置"**：`useFormStatus` 只能用于 `<form>` 内部的子组件，不能在定义 `<form>` 的同一个组件中使用。它读取的是最近的父级 `<form>` 的状态。
+3. **"乐观更新不需要处理失败"**：`useOptimistic` 会在服务器响应前先更新 UI，但如果服务器返回错误，你需要有回滚机制。否则用户看到的是"操作成功"，实际数据却没有变化。
+4. **"Server Actions 只能用于表单"**：Server Actions 也可以在事件处理器（如 `onClick`）中调用，不限于 `<form action={...}>`。删除、点赞等操作可以直接在按钮点击时调用。
+
+## 工程建议
+
+1. **Server Actions 单独放在 `actions.ts` 文件中**：不要在 Server Component 里内联定义 Server Action，抽到单独的 `actions.ts` 文件中，既方便复用也方便测试。
+2. **用 Zod 做输入验证**：在 Server Action 中用 Zod 的 `safeParse` 验证 FormData，返回结构化的错误信息（`flatten().fieldErrors`），前端用 `useActionState` 展示。
+3. **提交成功后用 `revalidatePath` 刷新缓存**：Server Action 修改数据后，调用 `revalidatePath` 或 `revalidateTag` 让相关页面重新获取数据，不需要手动 `router.refresh()`。
+4. **用 `redirect` 而不是返回跳转地址**：创建成功后需要跳转到详情页时，直接在 Server Action 中调用 `redirect('/posts/123')`，而不是返回 URL 让前端跳转。
 
 ## 九、小结
 

@@ -6,6 +6,14 @@
 
 ---
 
+## 场景引入
+
+你已经理解了 HTML 的标签结构和 DOM 树关系，现在你手上有一段从网站抓下来的 HTML 文本。你想从中提取所有商品的名称和价格，但面对几千行的标签字符串，你发现 Python 的字符串操作根本搞不定——用 `split` 切割会漏数据，用正则表达式匹配又太脆弱，嵌套几层就崩了。
+
+你需要一个专门解析 HTML 的工具，能像 JavaScript 的 `document.querySelector()` 一样精准定位元素。BeautifulSoup 就是这样的"瑞士军刀"——它把 HTML 字符串变成一棵可搜索的树，让你用标签名、class、id 等条件快速找到目标数据。
+
+---
+
 **完成本课学习后，你将能够：**
 
 1. 安装并正确导入 BeautifulSoup 库
@@ -468,6 +476,24 @@ link_html = """
 ```
 
 要求：提取所有有效链接（href 以 http 或 / 开头）。注意处理没有 href 属性和 href 为空的情况。
+
+---
+
+## 常见误区
+
+- **用正则表达式解析 HTML。** 正则表达式处理简单的文本匹配没问题，但 HTML 有嵌套结构、属性、注释等复杂情况，正则很容易在标签多嵌套几层时崩溃。BeautifulSoup 就是为了解决这个问题而生的。
+- **忘记指定解析器导致报警告。** `BeautifulSoup(html)` 不指定解析器会在运行时弹出警告，且不同解析器的行为可能不同。始终写明 `BeautifulSoup(html, 'lxml')` 或 `BeautifulSoup(html, 'html.parser')`。
+- **用 `['attr']` 而非 `.get('attr')` 取属性。** 属性不存在时，`['attr']` 会抛出 KeyError 导致程序崩溃，`.get('attr')` 则安全返回 None。爬虫中页面结构经常变化，用 `.get()` 更健壮。
+- **用 `.string` 提取含嵌套标签的文本。** `.string` 只在子节点是纯文本时有效，有嵌套标签时返回 None。统一使用 `.get_text(strip=True)` 可以避免这个问题。
+
+---
+
+## 工程建议
+
+- **养成先 find/select 定位容器，再提取子元素的习惯。** 比如先 `soup.select('.product-card')` 拿到所有商品卡片，再在每个卡片内 `.select_one('.price')` 提取价格。这比直接在整个页面中搜索 `.price` 更精准，避免误匹配到其他区域的同名 class。
+- **处理不规范 HTML 时优先用 lxml 解析器。** lxml 的容错能力比 html.parser 强很多，遇到标签未闭合、嵌套错误等问题时，lxml 能自动修复，减少解析失败的概率。
+- **编码问题用 `response.content` 而非 `response.text`。** 传入 bytes 类型的 `response.content`，让 BeautifulSoup 自动检测编码，比手动指定 `response.text` 的编码更可靠。
+- **组合使用 find() 和 select()。** 两种方法各有优势——find() 按属性过滤更灵活，select() 用 CSS 选择器更直观。实际项目中根据场景混用，不必死守一种写法。
 
 ---
 

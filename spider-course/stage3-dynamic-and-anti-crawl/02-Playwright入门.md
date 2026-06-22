@@ -6,6 +6,14 @@
 
 ---
 
+## 场景引入
+
+上一课你明白了动态网页的原理——数据由 JavaScript 渲染，requests 只能拿到空壳。那怎么办？总不能每次都手动打开浏览器复制粘贴吧。你需要一个"自动化助手"：它能帮你启动浏览器、打开网页、等 JS 执行完、把渲染后的内容交给你。这就是浏览器自动化工具做的事情。市面上有 Selenium、Puppeteer、Playwright 等选择，该学哪个？怎么装？怎么用？这节课从零开始搞定它。
+
+---
+
+## 学习目标
+
 完成本课学习后，你将能够：
 
 1. 说明为什么选择 Playwright 而不是 Selenium
@@ -977,6 +985,24 @@ with sync_playwright() as p:
     browser.close()
     print("浏览器已关闭")
 ```
+
+---
+
+## 常见误区
+
+- **只装了 pip 包没装浏览器**：`pip install playwright` 只装了 Python 包，必须再执行 `playwright install` 下载浏览器二进制文件，否则运行时会报 `Executable doesn't exist`。
+- **用 `time.sleep()` 代替等待机制**：Playwright 的 `wait_for_selector()` 和 `wait_for_load_state()` 是智能等待，比固定 sleep 更快更可靠。用 sleep 不仅浪费时间，还可能因为页面加载慢而抓到空数据。
+- **忘记关闭浏览器导致进程泄漏**：不用 `with` 语句管理 `sync_playwright()`，程序异常退出时 Chromium 进程会残留在内存里，多次运行后吃光系统资源。
+- **headless 和 headed 模式下页面表现不一致**：某些网站会检测 `navigator.webdriver` 属性，headless 模式更容易被识别。开发阶段用 headed 模式调试没问题，但要注意最终部署时两者的差异。
+
+---
+
+## 工程建议
+
+- **始终用 `with` 语句管理资源**：`with sync_playwright() as p:` 保证浏览器进程在任何情况下都能正确关闭，避免资源泄漏。
+- **开发用 headed，生产用 headless**：headed 模式能看到浏览器操作过程，方便调试选择器和等待逻辑；确认无误后切到 headless 模式提高效率。
+- **优先用 `page.content()` + BeautifulSoup**：对于已有 BeautifulSoup 代码的项目，拿到渲染后的 HTML 直接复用解析逻辑最省事；新项目可以直接用 Playwright 的 `query_selector` API。
+- **合理设置 `wait_until` 参数**：抓静态内容用 `domcontentloaded`（最快），等图片用 `load`，等 AJAX 数据用 `networkidle` 或 `wait_for_selector()`。
 
 ---
 

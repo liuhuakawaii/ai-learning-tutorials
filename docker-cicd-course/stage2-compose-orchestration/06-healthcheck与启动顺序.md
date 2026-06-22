@@ -6,6 +6,12 @@
 
 ---
 
+## 场景引入
+
+你执行 `docker compose up -d`，所有服务都显示 "Up"，但 API 一启动就报错：`ECONNREFUSED 127.0.0.1:5432`。你检查了数据库容器，确实在运行。问题是：PostgreSQL 容器虽然启动了，但数据库还没初始化完成，API 就急着去连接了。`depends_on` 只管"容器启动"，不管"服务就绪"。
+
+---
+
 ## 学习目标
 
 1. 理解为什么需要健康检查
@@ -292,6 +298,24 @@ docker compose ps  # 观察状态变化
 # 2. 观察 app 的行为
 # 3. 修复后重新启动
 ```
+
+---
+
+## 常见误区
+
+- **"depends_on 保证服务可用"**：`depends_on` 默认只保证容器启动（`service_started`），不保证服务就绪。必须用 `condition: service_healthy` 配合 `healthcheck` 才能确保服务真正可用。
+- **"健康检查命令越复杂越好"**：健康检查应该简单、快速、可靠。`pg_isready` 比 `psql -c "SELECT 1"` 更合适，因为它只检查连接能力，不执行查询。
+- **"start_period 设置越长越安全"**：`start_period` 过长会延迟发现问题。应该根据服务的实际启动时间设置，通常 5-30 秒足够。
+- **"所有服务都需要健康检查"**：一次性任务（如数据库初始化脚本）不需要健康检查。只有长期运行的服务才需要。
+
+---
+
+## 工程建议
+
+- **为每个数据库和缓存服务配置健康检查**：PostgreSQL 用 `pg_isready`，Redis 用 `redis-cli ping`，MySQL 用 `mysqladmin ping`。这些命令轻量且可靠。
+- **HTTP 服务的健康端点应该检查依赖**：`/health` 端点应该验证数据库和缓存连接，而不只是返回 200。这样能反映服务的真实状态。
+- **用 `docker compose ps` 观察启动过程**：启动后查看各服务的健康状态（healthy/unhealthy/starting），确认所有服务就绪后再测试。
+- **合理设置检查间隔**：数据库初始化需要时间，`interval: 5s` 配合 `retries: 5` 给出 25 秒的等待窗口。HTTP 服务可以用更长的间隔（30s）减少开销。
 
 ---
 

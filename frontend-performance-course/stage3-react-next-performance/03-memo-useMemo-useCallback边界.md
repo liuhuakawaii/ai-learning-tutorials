@@ -4,6 +4,10 @@
 > **前置知识**：理解 React 渲染机制和状态设计
 > **预计时长**：35 分钟
 
+## 场景引入
+
+你的同事在代码审查时要求你给所有组件都加上 memo，给所有函数都加上 useCallback，给所有计算都加上 useMemo。你照做了，但 Profiler 显示渲染性能几乎没有改善——甚至某些组件变得更慢了。原因很简单：你的组件本身很轻量（只有几个 DOM 元素），memo 的比较成本反而比直接渲染更高；传给子组件的 props 是内联对象，每次都是新引用，memo 根本没有生效。memo、useMemo、useCallback 不是万能药，用错地方反而有害。
+
 ---
 
 ## 学习目标
@@ -256,7 +260,7 @@ function Parent() {
 
 ---
 
-## 六、常见错误
+## 六、常见误区
 
 ```javascript
 // ❌ 错误 1：依赖数组遗漏
@@ -315,6 +319,13 @@ function Parent() {
 ```
 
 ---
+
+## 工程建议
+
+1. **先测量再优化**：用 React DevTools Profiler 确认组件确实有不必要的重渲染，再决定是否加 memo。不要预防性地到处加优化。
+2. **内联对象/函数是 memo 的天敌**：如果传给 memo 组件的 props 是内联对象或函数，memo 每次都会失效。用 useMemo/useCallback 稳定引用，或者把对象提取到组件外部。
+3. **依赖数组必须完整**：useMemo/useCallback 遗漏依赖会导致计算结果过时。ESLint 的 exhaustive-deps 规则能帮你检查。
+4. **关注 React Compiler 的进展**：未来 React Compiler 会自动处理 memo/useMemo/useCallback，届时手动优化将不再必要。但现阶段仍需手动优化。
 
 ## 动手练习
 
