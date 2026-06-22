@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-AI 生成的系统化学习教程合集，面向已有前端基础的学习者，涵盖后端、爬虫、AI 应用、性能工程、部署等方向。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时）以及多门基础技能和工程实践课程，共 **18 门课程、596 课时**。
+AI 生成的系统化学习教程合集，面向已有前端基础的学习者，涵盖后端、爬虫、AI 应用、性能工程、部署等方向。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时）以及多门基础技能和工程实践课程，共 **27 门课程、883 课时**。
 
 ## 技术栈
 
@@ -15,28 +15,43 @@ AI 生成的系统化学习教程合集，面向已有前端基础的学习者�
 
 ```
 ai-learning-tutorials/
-├── ai-engineer-path/              # AI 工程师学习路径（主线路）
-│   ├── 01-ai-app-course/          # AI 应用开发基础（35 课时）
-│   ├── 02-ai-agent-engineer-course/  # AI Agent 全栈工程师（52 课时）
-│   ├── 03-llm-eval-course/        # LLM 评估与可观测性（30 课时）
-│   ├── 04-multi-agent-course/     # 多 Agent 编排（30 课时）
-│   ├── 05-mcp-dev-course/         # MCP 协议深度开发（24 课时）
-│   ├── 06-llm-finetuning-course/  # 开源模型部署与微调（30 课时）
-│   ├── 07-multimodal-ai-course/   # 多模态 AI 应用（30 课时）
+├── ai-path/                       # AI 工程师学习路径（核心路线）
+│   ├── 01-ai-app/                 # AI 应用开发基础（35 课时）
+│   ├── 02-ai-agent-engineer/      # AI Agent 全栈工程师（52 课时）
+│   ├── 03-llm-eval/               # LLM 评估与可观测性（30 课时）
+│   ├── 04-multi-agent/            # 多 Agent 编排（30 课时）
+│   ├── 05-mcp-dev/                # MCP 协议深度开发（24 课时）
+│   ├── 06-llm-finetuning/         # 开源模型部署与微调（30 课时）
+│   ├── 07-multimodal-ai/          # 多模态 AI 应用（30 课时）
 │   └── graduation-project/        # 毕业项目：AI 数据分析平台
-├── backend-course/                # 全栈后端开发（32 课时）
-├── nextjs-fullstack-course/       # Next.js 全栈产品（35 课时）
-├── frontend-performance-course/   # 前端性能工程（35 课时）
-├── docker-cicd-course/            # Docker 与 CI/CD（35 课时）
-├── data-product-course/           # 数据产品化（35 课时）
-├── spider-course/                 # Python 爬虫（34 课时）
-├── ai-coding-engineering-course/  # AI 编程工程（34 课时）
-├── prompt-engineering-course/     # Prompt Engineering 深度课（30 课时）
-├── ai-security-course/            # AI 安全与对抗（30 课时）
-├── rag-engineering-course/        # RAG 工程化（30 课时）
-├── README.md                      # 课程总览与状态表
-└── COURSE_DESIGN_REVIEW.md        # 课程项目化评估记录
+├── ai-specialization/             # AI 专项进阶
+│   ├── prompt-engineering/        # Prompt Engineering 深度课（30 课时）
+│   ├── rag-engineering/           # RAG 工程化（30 课时）
+│   ├── ai-security/               # AI 安全与对抗（30 课时）
+│   ├── ai-coding-engineering/     # AI 编程工程（34 课时）
+│   └── ai-product/                # AI 产品化实战（30 课时）
+├── frontend/                      # 前端方向
+│   ├── nextjs-fullstack/          # Next.js 全栈产品（35 课时）
+│   ├── frontend-performance/      # 前端性能工程（35 课时）
+│   ├── graphics-shader/           # 3D 图形学与 Shader（47 课时）
+│   └── react-native/              # React Native 移动端（30 课时）
+├── backend/                       # 后端方向
+│   ├── nodejs-backend/            # 全栈后端开发（32 课时）
+│   ├── typescript-engineering/    # TypeScript 工程化（30 课时）
+│   └── python-spider/             # Python 爬虫（34 课时）
+├── devops/                        # 工程与运维
+│   ├── docker-cicd/               # Docker 与 CI/CD（35 课时）
+│   ├── kubernetes-cloud/          # 云原生与 Kubernetes（30 课时）
+│   ├── testing-qa/                # 测试与质量保障（30 课时）
+│   └── system-design/             # 系统设计与架构（30 课时）
+├── data/                          # 数据方向
+│   └── data-product/              # 数据产品化（35 课时）
+├── README.md
+├── AGENTS.md
+└── COURSE_DESIGN_REVIEW.md
 ```
+
+**新增课程时，必须放入对应的分类目录。** 如需新增分类，在根目录创建新分类目录并在 README.md 中添加对应表格。
 
 ### 单门课程内部结构
 
@@ -60,21 +75,21 @@ xx-course/
 
 ```bash
 # 运行某门课的 final-project 验证脚本
-cd ai-engineer-path/02-ai-agent-engineer-course/final-project
+cd ai-path/02-ai-agent-engineer/final-project
 python scripts/check.py
 
-cd backend-course/final-project
+cd backend/nodejs-backend/final-project
 node scripts/check.js
 
-# 验证离线 RAG 项目（01-ai-app-course）
-cd ai-engineer-path/01-ai-app-course/final-project/ai-knowledge-workspace-kit
+# 验证离线 RAG 项目（01-ai-app）
+cd ai-path/01-ai-app/final-project/ai-knowledge-workspace-kit
 npm run check
 npm run ingest
 npm run ask
 npm run eval
 
 # 验证前端性能 demo
-cd frontend-performance-course/final-project/performance-rescue-demo
+cd frontend/frontend-performance/final-project/performance-rescue-demo
 node scripts/check-demo-files.js
 ```
 
@@ -88,11 +103,13 @@ node scripts/check-demo-files.js
 4. **修改课时数**：更新课时列
 5. **调整课程分类**：在正确的表格中添加/删除行
 
-README.md 中有 4 张表格，按分类对应：
-- **AI 工程师学习路径** → `ai-engineer-path/` 下的课程
-- **基础技能课程** → `backend-course`、`nextjs-fullstack-course`、`frontend-performance-course`
-- **工程实践课程** → `docker-cicd-course`、`data-product-course`、`spider-course`
-- **专项进阶课程** → `ai-coding-engineering-course`、`prompt-engineering-course`、`ai-security-course`、`rag-engineering-course`
+README.md 中有 6 张表格，按分类对应：
+- **AI 工程师学习路径** → `ai-path/` 下的课程
+- **AI 专项进阶** → `ai-specialization/` 下的课程
+- **前端方向** → `frontend/` 下的课程
+- **后端方向** → `backend/` 下的课程
+- **工程与运维** → `devops/` 下的课程
+- **数据方向** → `data/` 下的课程
 
 ## 课程内容编写规范
 
@@ -197,6 +214,55 @@ const visibleTasks = tasks.filter(task => task.status === activeStatus)
 **正例：** "useMemo 缓存的是计算结果，不会直接阻止组件重新渲染。它适合缓存昂贵计算，或者稳定传给子组件的引用。" — 准确且有上下文
 
 > **一句话总结：课程应该像"资深工程师带新人做项目"，而不是"讲师念知识点"。**
+
+### 七、练习与答案解析规范
+
+每节课的 `## 练习` 章节必须包含**答案解析**，不能只有题目没有解答。
+
+**格式要求：**
+
+```markdown
+## 练习
+
+### 练习一：xxx
+
+题目描述...
+
+### 练习二：xxx
+
+题目描述...
+
+---
+
+## 参考答案
+
+### 练习一
+
+**思路**：简要说明解题思路和关键判断
+
+**答案**：
+\`\`\`typescript
+// 完整的参考代码或详细文字解答
+\`\`\`
+
+**要点**：
+- 关键点 1
+- 关键点 2
+
+### 练习二
+
+...
+```
+
+**规范要点：**
+
+1. 每道练习题必须有对应的参考答案
+2. 答案必须包含**解题思路**，不能只给最终结果
+3. 代码题的答案必须是**完整可运行**的代码，不能只有片段
+4. 文字题的答案必须有**具体分析**，不能只有一句话结论
+5. 如果题目有多种合理答案，应说明**评分标准**或**判断依据**
+6. 答案中应指出**常见错误写法**及其问题所在
+7. 答案与练习题之间用 `---` 分隔，使用 `## 参考答案` 作为标题
 
 ## Git 提交规范
 

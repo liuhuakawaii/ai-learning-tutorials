@@ -1,0 +1,927 @@
+# 第七课：阶段实战——books.toscrape.com 全站采集
+
+> **课程定位：** 第三阶段 · 动态网页与反爬 · 第七课时
+> **前置知识：** requests 请求、BeautifulSoup 解析、CSS 选择器、分页处理、数据导出、Session 管理
+> **预计时长：** 80 分钟
+
+---
+
+## 场景引入
+
+前六课你学了动态渲染原理、Playwright 浏览器自动化、反爬机制识别、请求头策略、登录态管理——每一项都是独立的技能点。但真实项目不会只用到其中一项，你需要把它们组合起来：先分析网站结构，再逐层采集分类、列表、详情页，中间要处理翻页、错误重试、数据导出，还要保证程序足够"礼貌"不被封。这节课我们用 books.toscrape.com 这个练习站，把这些技能串成一个完整的全站采集项目，体验从零到一写爬虫的全过程。
+
+---
+
+## 学习目标
+
+完成本课学习后，你将能够：
+
+1. 分析一个多层级网站的整体结构（首页 → 分类 → 书籍列表 → 书籍详情）
+2. 从分类页面提取所有书籍分类及其 URL
+3. 在每个分类内实现分页翻页，采集全部书籍列表
+4. 深入书籍详情页提取完整信息（价格、库存、评分、UPC、描述等）
+5. 将英文星级文字（如 "Three"）转换为数字评分
+6. 设计合理的嵌套数据结构，按分类组织数据
+7. 将数据导出为 CSV 和 JSON 格式，正确处理编码
+8. 为爬虫添加错误处理、重试机制和进度日志
+
+---
+
+## 一、认识我们的靶场
+
+### 1.1 books.toscrape.com 是什么？
+
+这是专门为爬虫学习者搭建的练习网站，模拟了一个网上书店。它完全合法，允许爬取，而且设计了多层页面结构——首页、分类页、书籍列表页、书籍详情页——非常适合练习完整的爬虫项目。
+
+网站地址：`https://books.toscrape.com/`
+
+```
+  网站结构全景图：
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  books.toscrape.com                                          │
+  │                                                              │
+  │  ┌───────────────────────────────────────────────────────┐   │
+  │  │  首页 (index.html)                                     │   │
+  │  │  ├── 左侧栏：书籍分类列表（Travel, Mystery, ...）       │   │
+  │  │  └── 主体：书籍列表（每页 20 本）+ 分页导航              │   │
+  │  └───────────────────────────────────────────────────────┘   │
+  │                                                              │
+  │  ┌───────────────────────────────────────────────────────┐   │
+  │  │  分类页 (catalogue/category/books/travel_2/index.html) │   │
+  │  │  ├── 该分类下的书籍列表                                 │   │
+  │  │  └── 分页：Next 按钮翻页                                │   │
+  │  └───────────────────────────────────────────────────────┘   │
+  │                                                              │
+  │  ┌───────────────────────────────────────────────────────┐   │
+  │  │  详情页 (catalogue/a-light-in-the-attic_1000/...)      │   │
+  │  │  ├── 书名、价格、库存状态、星级评分                      │   │
+  │  │  ├── 产品信息表（UPC、价格含税/不含税、税率等）         │   │
+  │  │  └── 书籍描述                                           │   │
+  │  └───────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────┘
+```
+
+### 1.2 项目目标与数据字段
+
+我们的目标是：**采集全站所有书籍的完整信息**，按分类组织，导出为 CSV 和 JSON。
+
+```
+  ┌──────────────────┬──────────────────────────────────────┐
+  │   字段            │   说明                                │
+  ├──────────────────┼──────────────────────────────────────┤
+  │  title           │  书名                                 │
+  │  price           │  价格（含税）                         │
+  │  availability    │  库存状态（In stock / Out of stock）  │
+  │  rating          │  评分（1-5 的数字）                   │
+  │  upc             │  产品编码（唯一标识）                 │
+  │  price_excl_tax  │  不含税价格                           │
+  │  price_incl_tax  │  含税价格                             │
+  │  tax             │  税额                                 │
+  │  num_reviews     │  评论数量                             │
+  │  description     │  书籍描述                             │
+  │  category        │  所属分类                             │
+  │  url             │  详情页链接                           │
+  └──────────────────┴──────────────────────────────────────┘
+```
+
+---
+
+## 二、分析网站结构
+
+### 2.1 首页结构
+
+在浏览器中打开 `https://books.toscrape.com/`，按 F12 打开 DevTools。
+
+```
+  div.container                   ← 页面容器
+  └── div.row
+      ├── aside.col-sm-3          ← 左侧栏（分类列表）
+      │   └── div.side_categories
+      │       └── ul.nav-list > li > ul
+      │           └── li > a[href]  ← 每个分类的链接
+      │
+      └── section.col-sm-9        ← 主体内容
+          └── ol.row              ← 书籍列表
+              └── li > article.product_pod
+                  ├── h3 > a[title]     ← 书名
+                  ├── p.price_color     ← 价格
+                  └── p.star-rating     ← 星级（class 中有评分词）
+```
+
+### 2.2 详情页结构
+
+```
+  ┌──────────────────┬──────────────────────────────────────────┐
+  │   数据字段        │   CSS 选择器                              │
+  ├──────────────────┼──────────────────────────────────────────┤
+  │   书名            │   h1                                     │
+  │   价格            │   p.price_color                          │
+  │   库存状态        │   p.instock availability                 │
+  │   星级评分        │   p.star-rating（class 中的单词）         │
+  │   产品信息表      │   table.table-striped tr                 │
+  │   描述            │   #product_description ~ p               │
+  └──────────────────┴──────────────────────────────────────────┘
+
+  产品信息表中每行的结构：
+  <tr><th>UPC</th><td>a897fe39b1053632</td></tr>
+  <tr><th>Price (excl. tax)</th><td>51.77</td></tr>
+  <tr><th>Number of reviews</th><td>0</td></tr>
+```
+
+---
+
+## 三、采集分类列表
+
+```python
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+
+BASE_URL = 'https://books.toscrape.com/'
+
+def get_categories(session):
+    """获取所有书籍分类及其 URL"""
+    response = session.get(BASE_URL)
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    categories = []
+    for a in soup.select('div.side_categories ul.nav-list li ul li a'):
+        name = a.get_text(strip=True)
+        categories.append({
+            'name': name,
+            'url': urljoin(BASE_URL, a['href']),
+        })
+    return categories
+
+# 测试
+session = requests.Session()
+categories = get_categories(session)
+print(f'共找到 {len(categories)} 个分类')
+# 输出：共找到 50 个分类
+```
+
+---
+
+## 四、采集分类内的书籍列表（含翻页）
+
+### 4.1 单页列表提取
+
+```python
+def get_books_from_list_page(session, url, category_name):
+    """从列表页提取书籍基本信息和详情链接"""
+    soup = fetch_page(session, url)  # fetch_page 带重试，后面定义
+    if not soup:
+        return [], None
+
+    books = []
+    for article in soup.select('article.product_pod'):
+        title = article.select_one('h3 a')['title']
+        detail_url = urljoin(url, article.select_one('h3 a')['href'])
+        price = article.select_one('p.price_color').get_text(strip=True)
+
+        # 从 class 中提取星级文字，例如 class="star-rating Three"
+        star_tag = article.select_one('p.star-rating')
+        rating_word = ''
+        if star_tag:
+            classes = [c for c in star_tag['class'] if c != 'star-rating']
+            rating_word = classes[0] if classes else ''
+
+        books.append({
+            'title': title, 'price': price,
+            'rating_word': rating_word, 'detail_url': detail_url,
+            'category': category_name,
+        })
+
+    # 获取下一页 URL
+    next_btn = soup.select_one('li.next a')
+    next_url = None
+    if next_btn:
+        base = url.rsplit('/', 1)[0] + '/'
+        next_url = base + next_btn['href']
+
+    return books, next_url
+```
+
+### 4.2 分类内翻页循环
+
+```python
+def get_all_books_in_category(session, category):
+    """采集一个分类下的所有书籍列表"""
+    all_books = []
+    url = category['url']
+    page_num = 1
+
+    while url:
+        books, next_url = get_books_from_list_page(session, url, category['name'])
+        if not books:
+            break
+        all_books.extend(books)
+        print(f'    第 {page_num} 页: {len(books)} 本（累计 {len(all_books)}）')
+        url = next_url
+        page_num += 1
+
+    return all_books
+```
+
+```
+  分类内翻页流程：
+
+  ┌──────────────┐
+  │  进入分类页   │
+  └──────┬───────┘
+         ▼
+  ┌──────────────┐     ┌──────────────┐
+  │  提取当前页   │────→│  存入列表     │
+  │  书籍数据     │     └──────────────┘
+  └──────┬───────┘
+         ▼
+  ┌──────────────┐     否    ┌──────────────┐
+  │  有 Next 按钮 ├──────────→│  分类采集完毕  │
+  └──────┬───────┘           └──────────────┘
+         │ 是
+         ▼
+  ┌──────────────┐
+  │  请求下一页   │──→ 回到"提取当前页"
+  └──────────────┘
+```
+
+---
+
+## 五、采集书籍详情页
+
+### 5.1 提取详情数据
+
+```python
+# 星级文字 → 数字映射
+RATING_MAP = {'One': 1, 'Two': 2, 'Three': 3, 'Four': 4, 'Five': 5}
+
+
+def get_book_detail(session, detail_url):
+    """从详情页提取完整信息"""
+    soup = fetch_page(session, detail_url)
+    if not soup:
+        return None
+
+    title = soup.select_one('h1').get_text(strip=True)
+    price_text = soup.select_one('p.price_color').get_text(strip=True)
+
+    stock_tag = soup.select_one('p.instock availability')
+    availability = stock_tag.get_text(strip=True) if stock_tag else 'Unknown'
+
+    star_tag = soup.select_one('p.star-rating')
+    rating_word = ''
+    if star_tag:
+        classes = [c for c in star_tag['class'] if c != 'star-rating']
+        rating_word = classes[0] if classes else ''
+
+    # 解析产品信息表
+    table_data = {}
+    for row in soup.select('table.table-striped tr'):
+        th = row.select_one('th').get_text(strip=True)
+        td = row.select_one('td').get_text(strip=True)
+        table_data[th] = td
+
+    desc_tag = soup.select_one('#product_description ~ p')
+    description = desc_tag.get_text(strip=True) if desc_tag else ''
+
+    return {
+        'title': title,
+        'price': price_text,
+        'availability': availability,
+        'rating_word': rating_word,
+        'rating': RATING_MAP.get(rating_word, 0),
+        'upc': table_data.get('UPC', ''),
+        'price_excl_tax': table_data.get('Price (excl. tax)', ''),
+        'price_incl_tax': table_data.get('Price (incl. tax)', ''),
+        'tax': table_data.get('Tax', ''),
+        'num_reviews': table_data.get('Number of reviews', '0'),
+        'description': description,
+        'url': detail_url,
+    }
+```
+
+### 5.2 星级转换示意
+
+```
+  网站显示          HTML class              转换结果
+  ★☆☆☆☆    →    star-rating One      →    1
+  ★★☆☆☆    →    star-rating Two      →    2
+  ★★★☆☆    →    star-rating Three    →    3
+  ★★★★☆    →    star-rating Four     →    4
+  ★★★★★    →    star-rating Five     →    5
+```
+
+---
+
+## 六、完整最终代码
+
+下面是整合了前面所有模块的完整代码，包含请求重试、数据导出、统计分析，可直接复制运行：
+
+```python
+"""
+books.toscrape.com 全站采集器
+依赖: pip install requests beautifulsoup4
+"""
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import csv, json, os, time
+from datetime import datetime
+
+# ==================== 配置 ====================
+BASE_URL = 'https://books.toscrape.com/'
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/120.0.0.0 Safari/537.36'
+}
+MAX_RETRIES = 3
+RETRY_DELAY = 2
+REQUEST_DELAY = 0.3
+OUTPUT_DIR = 'output'
+RATING_MAP = {'One': 1, 'Two': 2, 'Three': 3, 'Four': 4, 'Five': 5}
+
+
+# ==================== 请求模块 ====================
+def create_session():
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    return session
+
+def fetch_page(session, url):
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = session.get(url, timeout=10)
+            response.encoding = 'utf-8'
+            if response.status_code == 200:
+                return BeautifulSoup(response.text, 'html.parser')
+            print(f'    [重试 {attempt}/{MAX_RETRIES}] 状态码: {response.status_code}')
+        except requests.RequestException as e:
+            print(f'    [重试 {attempt}/{MAX_RETRIES}] 异常: {e}')
+        if attempt < MAX_RETRIES:
+            time.sleep(RETRY_DELAY)
+    print(f'    [失败] {url}')
+    return None
+
+
+# ==================== 分类采集 ====================
+def get_categories(session):
+    soup = fetch_page(session, BASE_URL)
+    if not soup:
+        return []
+    categories = []
+    for a in soup.select('div.side_categories ul.nav-list li ul li a'):
+        categories.append({
+            'name': a.get_text(strip=True),
+            'url': urljoin(BASE_URL, a['href']),
+        })
+    return categories
+
+
+# ==================== 列表采集 ====================
+def get_books_from_list_page(session, url, category_name):
+    soup = fetch_page(session, url)
+    if not soup:
+        return [], None
+    books = []
+    for article in soup.select('article.product_pod'):
+        title = article.select_one('h3 a')['title']
+        detail_url = urljoin(url, article.select_one('h3 a')['href'])
+        price = article.select_one('p.price_color').get_text(strip=True)
+        star_tag = article.select_one('p.star-rating')
+        rating_word = ''
+        if star_tag:
+            classes = [c for c in star_tag['class'] if c != 'star-rating']
+            rating_word = classes[0] if classes else ''
+        books.append({
+            'title': title, 'price': price,
+            'rating_word': rating_word, 'detail_url': detail_url,
+            'category': category_name,
+        })
+    next_btn = soup.select_one('li.next a')
+    next_url = None
+    if next_btn:
+        next_url = url.rsplit('/', 1)[0] + '/' + next_btn['href']
+    return books, next_url
+
+def get_all_books_in_category(session, category):
+    all_books, url, page_num = [], category['url'], 1
+    while url:
+        books, next_url = get_books_from_list_page(session, url, category['name'])
+        if not books:
+            break
+        all_books.extend(books)
+        print(f'    第 {page_num} 页: {len(books)} 本（累计 {len(all_books)}）')
+        url = next_url
+        page_num += 1
+        if url:
+            time.sleep(REQUEST_DELAY)
+    return all_books
+
+
+# ==================== 详情采集 ====================
+def get_book_detail(session, detail_url):
+    soup = fetch_page(session, detail_url)
+    if not soup:
+        return None
+    title = soup.select_one('h1').get_text(strip=True)
+    price_text = soup.select_one('p.price_color').get_text(strip=True)
+    stock_tag = soup.select_one('p.instock availability')
+    availability = stock_tag.get_text(strip=True) if stock_tag else 'Unknown'
+    star_tag = soup.select_one('p.star-rating')
+    rating_word = ''
+    if star_tag:
+        classes = [c for c in star_tag['class'] if c != 'star-rating']
+        rating_word = classes[0] if classes else ''
+    table_data = {}
+    for row in soup.select('table.table-striped tr'):
+        table_data[row.select_one('th').get_text(strip=True)] = \
+            row.select_one('td').get_text(strip=True)
+    desc_tag = soup.select_one('#product_description ~ p')
+    return {
+        'title': title, 'price': price_text, 'availability': availability,
+        'rating_word': rating_word, 'rating': RATING_MAP.get(rating_word, 0),
+        'upc': table_data.get('UPC', ''),
+        'price_excl_tax': table_data.get('Price (excl. tax)', ''),
+        'price_incl_tax': table_data.get('Price (incl. tax)', ''),
+        'tax': table_data.get('Tax', ''),
+        'num_reviews': table_data.get('Number of reviews', '0'),
+        'description': desc_tag.get_text(strip=True) if desc_tag else '',
+        'url': detail_url,
+    }
+
+
+# ==================== 导出模块 ====================
+def save_to_csv(data, filepath):
+    if not data:
+        return
+    fieldnames = [
+        'category', 'title', 'price', 'rating', 'availability',
+        'upc', 'price_excl_tax', 'price_incl_tax', 'tax',
+        'num_reviews', 'description', 'url'
+    ]
+    with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writeheader()
+        for book in data:
+            writer.writerow(book)
+    print(f'  CSV 已保存: {filepath}（共 {len(data)} 条）')
+
+def save_to_json(data, filepath):
+    organized = {}
+    for book in data:
+        cat = book.get('category', '未分类')
+        organized.setdefault(cat, []).append(
+            {k: v for k, v in book.items() if k != 'detail_url'}
+        )
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(organized, f, ensure_ascii=False, indent=2)
+    total = sum(len(v) for v in organized.values())
+    print(f'  JSON 已保存: {filepath}（共 {total} 条，{len(organized)} 个分类）')
+
+
+# ==================== 统计模块 ====================
+def print_summary(data):
+    categories = {}
+    for book in data:
+        categories.setdefault(book.get('category', ''), []).append(book)
+    ratings = [b['rating'] for b in data if b.get('rating', 0) > 0]
+    avg = sum(ratings) / len(ratings) if ratings else 0
+    print(f'\n{"=" * 55}')
+    print(f'  采集统计')
+    print(f'{"=" * 55}')
+    print(f'  总书籍数: {len(data)}')
+    print(f'  分类数量: {len(categories)}')
+    print(f'  平均评分: {avg:.2f}')
+
+
+# ==================== 主流程 ====================
+def main():
+    print('=' * 55)
+    print('  books.toscrape.com 全站采集器')
+    print(f'  开始时间: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    print('=' * 55)
+
+    session = create_session()
+
+    # 第一步：获取分类
+    print('\n[1/3] 获取书籍分类...')
+    categories = get_categories(session)
+    print(f'  共找到 {len(categories)} 个分类')
+    if not categories:
+        print('  获取分类失败，退出')
+        return []
+
+    # 第二步：采集详情
+    print(f'\n[2/3] 采集书籍详情...')
+    all_books = []
+    for idx, category in enumerate(categories, 1):
+        print(f'\n  [{idx}/{len(categories)}] 分类: {category["name"]}')
+        books = get_all_books_in_category(session, category)
+        print(f'    列表完成，{len(books)} 本，开始采集详情...')
+        for b_idx, book in enumerate(books, 1):
+            detail = get_book_detail(session, book['detail_url'])
+            if detail:
+                detail['category'] = category['name']
+                all_books.append(detail)
+            if b_idx % 20 == 0:
+                print(f'    详情进度: {b_idx}/{len(books)}')
+            time.sleep(REQUEST_DELAY)
+        print(f'    分类完成，总累计: {len(all_books)} 本')
+
+    # 第三步：导出
+    if all_books:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        print(f'\n[3/3] 导出数据...')
+        save_to_csv(all_books, os.path.join(OUTPUT_DIR, f'books_{ts}.csv'))
+        save_to_json(all_books, os.path.join(OUTPUT_DIR, f'books_{ts}.json'))
+        print_summary(all_books)
+
+    print(f'\n{"=" * 55}')
+    print(f'  结束时间: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    print(f'{"=" * 55}')
+    return all_books
+
+
+if __name__ == '__main__':
+    data = main()
+```
+
+### 代码结构总览
+
+```
+  main()
+  ├── [1] get_categories()              获取 50 个分类
+  ├── [2] 遍历分类 → 翻页列表 → 逐本详情
+  │       get_all_books_in_category()    分类内翻页
+  │       get_book_detail()              详情页提取
+  ├── [3] save_to_csv() + save_to_json() 导出数据
+  │       print_summary()                统计分析
+  └── 辅助: create_session() / fetch_page() / RATING_MAP
+```
+
+---
+
+## 七、运行效果
+
+运行完整代码后，你将看到逐页采集的日志：
+
+```
+  =======================================================
+    books.toscrape.com 全站采集器
+    开始时间: 2026-06-01 15:00:00
+  =======================================================
+
+  [1/3] 获取书籍分类...
+    共找到 50 个分类
+
+  [2/3] 采集书籍详情...
+
+    [1/50] 分类: Travel
+      第 1 页: 1 本（累计 1）
+      列表完成，共 11 本，开始采集详情...
+      分类完成，总累计: 11 本
+
+    [2/50] 分类: Mystery
+      第 1 页: 20 本（累计 20）
+      ...
+      列表完成，共 162 本，开始采集详情...
+      详情进度: 20/162
+      ...
+      分类完成，总累计: 173 本
+
+    ...（省略中间分类）
+
+  [3/3] 导出数据...
+    CSV 已保存: output/books_20260601_150000.csv（共 1000 条）
+    JSON 已保存: output/books_20260601_150000.json（共 1000 条，50 个分类）
+
+    总书籍数: 1000 | 分类数量: 50 | 平均评分: 2.92
+
+  结束时间: 2026-06-01 15:45:00
+```
+
+全站约 1000 本书。建议先用少量分类测试，确认无误后再全量运行。
+
+---
+
+## 八、知识回顾：三个阶段的技能串联
+
+```
+  第一阶段 Python 基础：
+    变量/字典/列表 → 存储数据 | 函数/f-string → 模块化代码 | 文件读写 → 导出
+
+  第二阶段 HTTP 与网页解析：
+    requests → 发请求 | BeautifulSoup + CSS 选择器 → 解析页面
+    分页处理 → li.next a | csv/json → 数据导出
+
+  第三阶段 进阶技术：
+    Session → 统一请求会话 | 重试机制 → 自动恢复
+    礼貌爬取 → 请求间隔 | 多层页面 → 首页→分类→列表→详情
+```
+
+---
+
+## 九、动手练习
+
+### 练习一：运行完整代码
+
+将第八节的完整代码保存为 `books_spider.py`。为了节省时间，先只采集前 3 个分类做测试：
+
+```python
+# 在 main() 中临时修改，只采集前 3 个分类
+categories = categories[:3]  # 测试用
+```
+
+**检查清单：** 程序运行无报错、CSV 文件 Excel 可正常打开、JSON 按分类组织、每本书有 12 个字段。
+
+### 练习二：添加统计分析
+
+在 `print_summary()` 中增加以下功能：
+
+```python
+# 提示：价格字段带货币符号，需要清洗后再转数字
+# price_clean = float(book['price'].replace('', '').replace('', ''))
+```
+
+1. 全站平均价格
+2. 最贵和最便宜的各 5 本书
+3. 每个分类的平均评分排名
+
+### 练习三：添加断点续爬
+
+为爬虫增加断点续爬功能：每采集完一个分类保存进度到 `progress.json`，记录已完成的分类名和已采集的数据。程序重启时检测进度文件，跳过已完成的分类，全部完成后删除进度文件。
+
+---
+
+## 常见误区
+
+- **一上来就写全量代码**：应该先用少量分类（比如前 3 个）测试整个流程——翻页逻辑对不对、详情页选择器是否正确、导出格式是否符合预期——确认无误后再全量运行。
+- **详情页和列表页的选择器一样**：列表页的书籍信息是精简的（标题、价格、星级），详情页才有完整的 UPC、税率、描述等字段。两者的 HTML 结构不同，选择器不能混用。
+- **翻页逻辑只看 `li.next a`**：有些网站的翻页是基于 JavaScript 的，没有传统的"下一页"链接。books.toscrape.com 用的是传统翻页，但实际项目中要根据网站结构灵活调整。
+- **忘了处理相对路径**：`urljoin()` 是必须的——网站的 href 可能是相对路径（如 `catalogue/page-2.html`），不拼接 base URL 就会请求到错误的地址。
+
+---
+
+## 工程建议
+
+- **先写模块化代码再组装**：把"获取分类""列表翻页""详情提取""数据导出"拆成独立函数，逐个测试通过后再组合成主流程，比一口气写完整代码更容易排查问题。
+- **加足够的日志和进度提示**：全站采集可能跑 30-45 分钟，没有日志你根本不知道程序在干什么、卡在哪了。至少记录每个分类的进度和每 20 条详情的提取状态。
+- **导出时用 `utf-8-sig` 编码处理中文**：CSV 文件如果用 `utf-8` 编码，用 Excel 打开会乱码。`utf-8-sig` 带 BOM 头，Excel 能正确识别中文。
+- **为后续扩展留好接口**：今天的靶场是 books.toscrape.com，明天可能是别的网站。把配置（URL、选择器、延迟参数）和逻辑分开，方便复用代码适配不同目标。
+
+---
+
+## 小结
+
+本课的核心收获：
+
+1. **多层网站分析**：首页 → 分类 → 列表 → 详情，逐层深入
+2. **分类采集**：从侧边栏 `ul.nav-list` 提取所有分类链接
+3. **列表翻页**：在每个分类内用 `li.next a` 实现翻页
+4. **详情提取**：从产品信息表获取 UPC、价格、税率等结构化数据
+5. **星级转换**：`RATING_MAP` 将英文单词转为 1-5 数字
+6. **数据组织**：CSV 扁平导出 + JSON 按分类嵌套导出
+7. **健壮性**：重试机制、错误处理、`utf-8-sig` 编码
+
+```
+  项目代码结构总结：
+
+  books_spider.py
+  ├── 配置区（URL、Headers、延迟参数）
+  ├── create_session()            创建请求会话
+  ├── fetch_page()                带重试的页面请求
+  ├── get_categories()            获取分类列表
+  ├── get_books_from_list_page()  列表页书籍提取
+  ├── get_all_books_in_category() 分类内翻页采集
+  ├── get_book_detail()           详情页数据提取
+  ├── save_to_csv() / save_to_json()  数据导出
+  ├── print_summary()             统计分析
+  └── main()                      主流程
+```
+
+---
+
+## 下一课预告
+
+恭喜你完成了第三阶段的实战项目！你现在已经能够独立完成一个多层级网站的全站采集了。接下来我们将进入 **第四阶段：Scrapy 框架与工程化**，学习使用专业的爬虫框架 Scrapy 来重构我们的代码。Scrapy 提供了请求调度、数据管道、中间件等企业级功能，能让你的爬虫更高效、更可维护。从"手工爬虫"到"工程化爬虫"，这是一个质的飞跃。我们下阶段见！
+
+---
+
+## 参考答案
+
+### 练习一
+
+**思路**：将第六节的完整代码保存为 `books_spider.py`，在 `main()` 中临时限制分类数量为前 3 个进行测试。运行后检查 CSV 文件是否能正常打开、JSON 是否按分类组织、每本书是否有 12 个字段。
+
+**答案**：
+```python
+# 保存第六节完整代码为 books_spider.py
+# 在 main() 函数中，获取分类列表后加一行限制：
+# categories = categories[:3]  # 测试用，只采集前 3 个分类
+
+# 运行方式：
+# python books_spider.py
+
+# 检查清单：
+# 1. 程序运行无报错 ✓
+# 2. output/ 目录下生成 CSV 文件，Excel 可正常打开 ✓
+# 3. output/ 目录下生成 JSON 文件，按分类名组织 ✓
+# 4. 每本书包含 category, title, price, rating, availability,
+#    upc, price_excl_tax, price_incl_tax, tax, num_reviews,
+#    description, url 共 12 个字段 ✓
+```
+
+**要点**：
+- 先用少量分类测试是最佳实践，确认选择器和翻页逻辑正确后再全量运行
+- CSV 用 `utf-8-sig` 编码确保 Excel 打开不乱码
+- JSON 按分类嵌套组织，方便按分类查看数据
+- 如果某个分类采集失败，检查 `fetch_page()` 的重试日志定位问题
+
+### 练习二
+
+**思路**：在 `print_summary()` 函数中增加价格统计和分类评分排名。关键是价格字段带货币符号（如 `£51.77`），需要先清洗再转为数字。使用字典按分类聚合数据，然后排序输出。
+
+**答案**：
+```python
+def print_summary(data):
+    categories = {}
+    for book in data:
+        cat = book.get('category', '')
+        categories.setdefault(cat, []).append(book)
+
+    ratings = [b['rating'] for b in data if b.get('rating', 0) > 0]
+    avg_rating = sum(ratings) / len(ratings) if ratings else 0
+
+    # 清洗价格：去掉货币符号，转为浮点数
+    prices = []
+    for book in data:
+        price_str = book.get('price', '0')
+        price_clean = price_str.replace('£', '').replace('¥', '').replace('$', '')
+        price_clean = price_clean.replace(',', '').strip()
+        try:
+            prices.append(float(price_clean))
+        except ValueError:
+            pass
+
+    avg_price = sum(prices) / len(prices) if prices else 0
+
+    # 最贵和最便宜的各 5 本书
+    price_books = []
+    for book in data:
+        price_str = book.get('price', '0')
+        price_clean = price_str.replace('£', '').replace('¥', '').replace('$', '')
+        price_clean = price_clean.replace(',', '').strip()
+        try:
+            price_books.append((float(price_clean), book['title']))
+        except ValueError:
+            pass
+
+    price_books.sort(key=lambda x: x[0], reverse=True)
+
+    # 每个分类的平均评分
+    cat_ratings = {}
+    for cat, books in categories.items():
+        cat_scores = [b['rating'] for b in books if b.get('rating', 0) > 0]
+        if cat_scores:
+            cat_ratings[cat] = sum(cat_scores) / len(cat_scores)
+    sorted_cats = sorted(cat_ratings.items(), key=lambda x: x[1], reverse=True)
+
+    print(f'\n{"=" * 55}')
+    print(f'  采集统计')
+    print(f'{"=" * 55}')
+    print(f'  总书籍数: {len(data)}')
+    print(f'  分类数量: {len(categories)}')
+    print(f'  平均评分: {avg_rating:.2f}')
+    print(f'  平均价格: £{avg_price:.2f}')
+
+    print(f'\n  最贵的 5 本书:')
+    for price, title in price_books[:5]:
+        print(f'    £{price:.2f} - {title}')
+
+    print(f'\n  最便宜的 5 本书:')
+    for price, title in price_books[-5:]:
+        print(f'    £{price:.2f} - {title}')
+
+    print(f'\n  分类平均评分排名 (前 10):')
+    for rank, (cat, avg) in enumerate(sorted_cats[:10], 1):
+        print(f'    {rank}. {cat}: {avg:.2f}')
+```
+
+**要点**：
+- 价格字段带货币符号（如 `£`），必须先清洗再转数字，否则 `float()` 会报错
+- 使用列表推导式 + `sort()` 进行排序，`reverse=True` 为降序
+- 分类评分排名用字典聚合后排序，避免遗漏没有评分数据的分类
+- 输出格式对齐，方便阅读
+
+### 练习三
+
+**思路**：每采集完一个分类后，将已完成的分类名和已采集的数据保存到 `progress.json`。程序重启时先检查进度文件，加载已完成的分类列表和已有数据，跳过已完成的分类继续采集。全部完成后删除进度文件。
+
+**答案**：
+```python
+import os
+import json
+from datetime import datetime
+
+PROGRESS_FILE = 'progress.json'
+
+
+def save_progress(done_categories, all_books):
+    """保存采集进度"""
+    progress = {
+        'done_categories': done_categories,
+        'all_books': all_books,
+        'saved_at': datetime.now().isoformat(),
+    }
+    with open(PROGRESS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(progress, f, ensure_ascii=False, indent=2)
+    print(f'  进度已保存: {len(done_categories)} 个分类完成, '
+          f'{len(all_books)} 本书')
+
+
+def load_progress():
+    """加载采集进度，返回 (已完成分类集合, 已有数据列表)"""
+    if not os.path.exists(PROGRESS_FILE):
+        return set(), []
+    with open(PROGRESS_FILE, 'r', encoding='utf-8') as f:
+        progress = json.load(f)
+    done = set(progress.get('done_categories', []))
+    books = progress.get('all_books', [])
+    print(f'  检测到进度文件: {len(done)} 个分类已完成, '
+          f'{len(books)} 本书已采集')
+    return done, books
+
+
+def main():
+    print('=' * 55)
+    print('  books.toscrape.com 全站采集器（断点续爬版）')
+    print(f'  开始时间: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    print('=' * 55)
+
+    session = create_session()
+
+    # 获取分类
+    print('\n[1/3] 获取书籍分类...')
+    categories = get_categories(session)
+    print(f'  共找到 {len(categories)} 个分类')
+
+    # 加载进度
+    done_categories, all_books = load_progress()
+
+    # 采集详情
+    print(f'\n[2/3] 采集书籍详情...')
+    for idx, category in enumerate(categories, 1):
+        cat_name = category['name']
+
+        # 跳过已完成的分类
+        if cat_name in done_categories:
+            print(f'\n  [{idx}/{len(categories)}] 分类: {cat_name} '
+                  f'[已完成，跳过]')
+            continue
+
+        print(f'\n  [{idx}/{len(categories)}] 分类: {cat_name}')
+        books = get_all_books_in_category(session, category)
+        print(f'    列表完成，{len(books)} 本，开始采集详情...')
+
+        for b_idx, book in enumerate(books, 1):
+            detail = get_book_detail(session, book['detail_url'])
+            if detail:
+                detail['category'] = cat_name
+                all_books.append(detail)
+            if b_idx % 20 == 0:
+                print(f'    详情进度: {b_idx}/{len(books)}')
+            time.sleep(REQUEST_DELAY)
+
+        # 每完成一个分类就保存进度
+        done_categories.add(cat_name)
+        save_progress(list(done_categories), all_books)
+        print(f'    分类完成，总累计: {len(all_books)} 本')
+
+    # 导出
+    if all_books:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        print(f'\n[3/3] 导出数据...')
+        save_to_csv(all_books, os.path.join(OUTPUT_DIR, f'books_{ts}.csv'))
+        save_to_json(all_books, os.path.join(OUTPUT_DIR, f'books_{ts}.json'))
+        print_summary(all_books)
+
+    # 全部完成，删除进度文件
+    if os.path.exists(PROGRESS_FILE):
+        os.remove(PROGRESS_FILE)
+        print('\n  所有分类采集完毕，进度文件已删除')
+
+    print(f'\n{"=" * 55}')
+    print(f'  结束时间: {datetime.now():%Y-%m-%d %H:%M:%S}')
+    print(f'{"=" * 55}')
+```
+
+**要点**：
+- 进度文件 `progress.json` 记录已完成的分类名列表和已采集的数据
+- 重启时用 `set()` 存储已完成分类，O(1) 复杂度快速判断是否跳过
+- 每完成一个分类立即保存进度，而不是等全部完成，这样即使中途崩溃也不会丢失太多数据
+- 全部完成后删除进度文件，避免下次运行时误判为"已完成"
+- `save_progress()` 接收列表而非集合，因为 JSON 不支持序列化 `set` 类型

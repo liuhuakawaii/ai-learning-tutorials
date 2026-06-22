@@ -1,0 +1,453 @@
+# 第二课：service、network、volume
+
+> **课程定位**：深入理解 Compose 的三大核心概念
+> **前置知识**：compose.yml 基本结构（第一课）
+> **预计时长**：35 分钟
+
+---
+
+## 场景引入
+
+你用 `docker compose up` 启动了项目，一切正常。但你发现前端容器访问后端 API 时用的是 `localhost:3000`，部署到服务器后就不行了——因为容器的 `localhost` 不是宿主机的 `localhost`。你开始困惑：容器之间到底怎么通信？网络是怎么隔离的？Volume 和 Bind Mount 有什么区别，什么时候该用哪个？
+
+---
+
+## 学习目标
+
+1. 掌握 service 的完整配置选项
+2. 理解自定义网络的配置和用途
+3. 掌握 Named Volume 和 Bind Mount 的使用场景
+
+---
+
+## 一、Service 详解
+
+### 1.1 完整配置示例
+
+```yaml
+services:
+  app:
+    # 镜像来源
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: my-app:1.0
+
+    # 运行配置
+    container_name: my-app
+    restart: unless-stopped
+    working_dir: /app
+    user: "1001:1001"
+
+    # 端口
+    ports:
+      - "3000:3000"
+
+    # 环境变量
+    environment:
+      NODE_ENV: production
+    env_file:
+      - .env
+
+    # 数据卷
+    volumes:
+      - ./src:/app/src          # Bind Mount
+      - uploads:/app/uploads    # Named Volume
+
+    # 网络
+    networks:
+      - app-network
+
+    # 依赖
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+### 1.2 restart 策略
+
+```yaml
+services:
+  app:
+    restart: no            # 不自动重启（默认）
+    restart: always        # 总是重启
+    restart: on-failure    # 只在非正常退出时重启
+    restart: unless-stopped # 除非手动停止，否则总是重启
+```
+
+```
+策略选择：
+
+  开发环境：no 或 on-failure
+  生产环境：unless-stopped
+  关键服务：always
+```
+
+---
+
+## 二、Network 详解
+
+### 2.1 默认网络
+
+```yaml
+# 不指定网络时，Compose 自动创建默认网络
+services:
+  app:
+    image: node:18
+  postgres:
+    image: postgres:14
+
+# 两个服务自动在同一网络中，可以用服务名互相访问
+# app 可以通过 "postgres:5432" 连接数据库
+```
+
+### 2.2 自定义网络
+
+```yaml
+services:
+  app:
+    networks:
+      - frontend
+      - backend
+
+  postgres:
+    networks:
+      - backend
+
+  nginx:
+    networks:
+      - frontend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+```
+
+```
+网络隔离：
+
+  ┌─────────────────────────────────────────┐
+  │  frontend 网络                           │
+  │  ┌────────┐  ┌────────┐                │
+  │  │  app   │  │  nginx  │                │
+  │  └────────┘  └────────┘                │
+  │       │                                  │
+  │  ─────┼────── backend 网络 ─────────── │
+  │       │                                  │
+  │  ┌────────┐  ┌────────┐                │
+  │  │  app   │  │postgres│                │
+  │  └────────┘  └────────┘                │
+  └─────────────────────────────────────────┘
+
+  nginx 只能访问 app，不能直接访问 postgres
+  app 可以访问 postgres
+```
+
+---
+
+## 三、Volume 详解
+
+### 3.1 Named Volume
+
+```yaml
+services:
+  postgres:
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:                  # 顶层声明
+    driver: local          # 存储驱动
+```
+
+```
+Named Volume 特点：
+  - Docker 管理存储位置
+  - 容器删除后数据保留
+  - 适合数据库等有状态服务
+  - 可以在多个容器间共享
+```
+
+### 3.2 Bind Mount
+
+```yaml
+services:
+  app:
+    volumes:
+      - ./src:/app/src              # 开发时挂载源代码
+      - ./config/app.conf:/etc/app.conf:ro  # 只读挂载
+```
+
+```
+Bind Mount 特点：
+  - 直接映射宿主机目录
+  - 实时同步
+  - 适合开发环境
+  - 依赖宿主机的目录结构
+```
+
+### 3.3 只读挂载
+
+```yaml
+services:
+  app:
+    volumes:
+      - ./config:/app/config:ro     # ro = read only
+      - pgdata:/data:rw             # rw = read write（默认）
+```
+
+---
+
+## 四、实战：完整 compose.yml
+
+```yaml
+# compose.yml - 完整示例
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://postgres:secret@postgres:5432/mydb
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redis-data:
+```
+
+---
+
+## 五、动手练习
+
+### 练习一：自定义网络隔离
+
+创建两个网络，验证网络隔离效果。
+
+### 练习二：数据持久化
+
+```bash
+# 1. 启动 PostgreSQL
+docker compose up -d postgres
+
+# 2. 创建测试数据
+docker compose exec postgres psql -U postgres -c "CREATE TABLE test (id int);"
+
+# 3. 停止并删除容器
+docker compose down
+
+# 4. 重新启动，验证数据是否还在
+docker compose up -d postgres
+docker compose exec postgres psql -U postgres -c "SELECT * FROM test;"
+```
+
+---
+
+## 常见误区
+
+- **"所有服务都应该暴露端口到宿主机"**：只有需要从外部访问的服务（如 Web 前端、API 网关）才需要 `ports`。数据库、缓存等内部服务不需要暴露端口，通过容器网络访问更安全。
+- **"Bind Mount 比 Named Volume 好"**：两者用途不同。Bind Mount 适合开发时挂载源码，Named Volume 适合数据库等有状态服务。用错场景会导致数据丢失或性能问题。
+- **"Compose 自动创建的网络就够用了"**：默认网络支持基本通信，但无法实现网络隔离。生产环境应该用自定义网络，把前端和后端分开，限制不必要的访问。
+- **"container_name 可以随便起"**：Compose 中的 `container_name` 会覆盖自动生成的名称，在需要扩展（scale）服务时会导致冲突。除非有特殊需求，不要设置 `container_name`。
+
+---
+
+## 工程建议
+
+- **内部服务不要暴露端口**：PostgreSQL、Redis 等只通过容器网络通信，不映射到宿主机，减少攻击面。
+- **用 `restart: unless-stopped` 替代 `always`**：`always` 会在 Docker 守护进程重启后自动启动容器，包括你手动停止的。`unless-stopped` 更符合预期。
+- **配置日志轮转**：`logging` 配置 `max-size` 和 `max-file` 防止日志文件无限增长撑满磁盘。
+- **用 `deploy.resources.limits` 限制资源**：防止单个容器吃光 CPU 和内存，影响其他服务。
+
+---
+
+## 小结
+
+1. **Service**：定义容器的完整配置，包括镜像、端口、环境变量、卷、网络等
+2. **Network**：默认网络支持服务名访问，自定义网络实现隔离
+3. **Volume**：Named Volume 适合持久化数据，Bind Mount 适合开发环境
+4. **`depends_on` + `healthcheck`**：确保服务按正确顺序启动
+
+---
+
+## 下一课预告
+
+下一课我们将实战搭建 App + PostgreSQL + Redis 的完整开发环境。
+
+---
+
+## 参考答案
+
+### 练习一
+
+**思路**：创建两个自定义网络（frontend 和 backend），将不同服务分配到不同网络中，验证网络隔离效果——frontend 网络中的 nginx 无法直接访问 backend 网络中的 postgres。
+
+**答案**：
+
+```yaml
+# compose.yml
+services:
+  app:
+    image: node:18-alpine
+    command: sh -c "sleep 3600"
+    networks:
+      - frontend
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    networks:
+      - frontend
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_PASSWORD: secret
+    networks:
+      - backend
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+```
+
+```bash
+# 启动所有服务
+docker compose up -d
+
+# 验证 app 能访问 postgres（同一网络）
+docker compose exec app sh -c "wget -qO- http://postgres:5432 && echo 'reachable' || echo 'port responded (expected error for HTTP on PG)'"
+# postgres 监听 5432，wget 会报错但说明网络可达
+
+# 验证 nginx 无法访问 postgres（不同网络）
+docker compose exec nginx sh -c "wget -qO- --timeout=3 http://postgres:5432 2>&1 || echo 'BLOCKED - cannot reach postgres'"
+# 预期输出：连接超时或无法解析主机名，证明网络隔离生效
+
+# 验证 nginx 能访问 app（同一网络）
+docker compose exec nginx sh -c "wget -qO- --timeout=3 http://app:3000 2>&1 || echo 'app is reachable (may not have HTTP server)'"
+
+# 清理
+docker compose down
+```
+
+**要点**：
+- `app` 同时加入 `frontend` 和 `backend` 两个网络，可以访问两边的服务
+- `nginx` 只在 `frontend` 网络，无法直接访问 `postgres`
+- `postgres` 只在 `backend` 网络，对外部完全不可见
+- 这就是网络隔离的核心价值：限制不必要的访问，减少攻击面
+- 生产环境中，数据库、缓存等内部服务应该只在 backend 网络
+
+### 练习二
+
+**思路**：通过实际操作验证 Named Volume 的数据持久化特性——即使容器被删除，Volume 中的数据依然存在。
+
+**答案**：
+
+```bash
+# 1. 启动 PostgreSQL
+docker compose up -d postgres
+
+# 2. 等待数据库就绪
+docker compose exec postgres pg_isready -U postgres
+
+# 3. 创建测试数据
+docker compose exec postgres psql -U postgres -c "
+  CREATE TABLE test (id serial PRIMARY KEY, name text);
+  INSERT INTO test (name) VALUES ('hello'), ('world');
+"
+# 预期输出：CREATE TABLE / INSERT 0 2
+
+# 4. 验证数据存在
+docker compose exec postgres psql -U postgres -c "SELECT * FROM test;"
+# 预期输出：
+#  id | name
+# ----+-------
+#   1 | hello
+#   2 | world
+
+# 5. 停止并删除容器
+docker compose down
+# 注意：这里没有 -v，所以 Volume 保留
+
+# 6. 重新启动
+docker compose up -d postgres
+
+# 7. 验证数据还在
+docker compose exec postgres psql -U postgres -c "SELECT * FROM test;"
+# 预期输出同上，数据完好
+
+# 清理
+docker compose down -v
+```
+
+**要点**：
+- `docker compose down` 只删除容器，不删除 Volume（默认行为）
+- `docker compose down -v` 才会删除 Volume，数据会丢失
+- Named Volume 的生命周期独立于容器，这是数据持久化的核心
+- 第 5 步用 `docker compose down`（不带 `-v`），第 7 步才能验证数据保留
+- 生产环境绝不能随意使用 `down -v`

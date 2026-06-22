@@ -4,49 +4,112 @@
 
 ## 简介
 
-这个仓库存放了我利用 AI 生成的各类技术学习教程。课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时），以及多门基础技能和工程实践课程，共 **18 门课程、596 课时**。所有重点课程都配有贯穿式 final project / project kit，方便边学边验证。
+这个仓库存放了我利用 AI 生成的各类技术学习教程。课程主要面向已有前端基础的学习者，帮助你从零补齐后端开发、数据采集、AI 应用、性能工程与部署能力。仓库包含一条完整的 **AI 工程师学习路径**（7 门课程 + 毕业项目，共 231 课时），以及多门基础技能和工程实践课程，共 **27 门课程、883 课时**。所有重点课程都配有贯穿式 final project / project kit，方便边学边验证。
+
+## 目录结构
+
+```
+ai-learning-tutorials/
+├── ai-path/                           # AI 工程师学习路径（核心路线）
+│   ├── 01-ai-app/                     # AI 应用开发基础（35课时）
+│   ├── 02-ai-agent-engineer/          # AI Agent 全栈工程师（52课时）
+│   ├── 03-llm-eval/                   # LLM 评估与可观测性（30课时）
+│   ├── 04-multi-agent/                # 多 Agent 编排（30课时）
+│   ├── 05-mcp-dev/                    # MCP 协议深度开发（24课时）
+│   ├── 06-llm-finetuning/             # 开源模型部署与微调（30课时）
+│   ├── 07-multimodal-ai/              # 多模态 AI 应用（30课时）
+│   └── graduation-project/            # 毕业项目：AI 数据分析平台
+│
+├── ai-specialization/                 # AI 专项进阶
+│   ├── prompt-engineering/            # Prompt Engineering 深度课（30课时）
+│   ├── rag-engineering/               # RAG 工程化（30课时）
+│   ├── ai-security/                   # AI 安全与对抗（30课时）
+│   ├── ai-coding-engineering/         # AI 编程工程（34课时）
+│   └── ai-product/                    # AI 产品化实战（30课时）
+│
+├── frontend/                          # 前端方向
+│   ├── nextjs-fullstack/              # Next.js 全栈产品（35课时）
+│   ├── frontend-performance/          # 前端性能工程（35课时）
+│   ├── graphics-shader/               # 3D 图形学与 Shader（47课时）
+│   └── react-native/                  # React Native 移动端（30课时）
+│
+├── backend/                           # 后端方向
+│   ├── nodejs-backend/                # 全栈后端开发（32课时）
+│   ├── typescript-engineering/        # TypeScript 工程化（30课时）
+│   └── python-spider/                 # Python 爬虫（34课时）
+│
+├── devops/                            # 工程与运维
+│   ├── docker-cicd/                   # Docker 与 CI/CD（35课时）
+│   ├── kubernetes-cloud/              # 云原生与 Kubernetes（30课时）
+│   ├── testing-qa/                    # 测试与质量保障（30课时）
+│   └── system-design/                 # 系统设计与架构（30课时）
+│
+├── data/                              # 数据方向
+│   └── data-product/                  # 数据产品化（35课时）
+│
+├── README.md
+├── AGENTS.md
+└── COURSE_DESIGN_REVIEW.md
+```
 
 ## 教程列表
 
 ### AI 工程师学习路径
 
-系统化的 AI 工程师成长路线，7 门课程 + 毕业项目，详见 [ai-engineer-path/](./ai-engineer-path/)
+系统化的 AI 工程师成长路线，7 门课程 + 毕业项目，详见 [ai-path/](./ai-path/)
 
 | 序号 | 课程 | 主题 | 课时 | 状态 |
 |------|------|------|------|------|
-| 01 | [ai-app-course](./ai-engineer-path/01-ai-app-course/) | AI 应用开发基础 | 35 | 已完成 |
-| 02 | [ai-agent-engineer-course](./ai-engineer-path/02-ai-agent-engineer-course/) | AI Agent 全栈工程师 | 52 | 已完成 |
-| 03 | [llm-eval-course](./ai-engineer-path/03-llm-eval-course/) | LLM 评估与可观测性 | 30 | 已完成 |
-| 04 | [multi-agent-course](./ai-engineer-path/04-multi-agent-course/) | 多 Agent 编排 | 30 | 已完成 |
-| 05 | [mcp-dev-course](./ai-engineer-path/05-mcp-dev-course/) | MCP 协议深度开发 | 24 | 已完成 |
-| 06 | [llm-finetuning-course](./ai-engineer-path/06-llm-finetuning-course/) | 开源模型部署与微调 | 30 | 已完成 |
-| 07 | [multimodal-ai-course](./ai-engineer-path/07-multimodal-ai-course/) | 多模态 AI 应用 | 30 | 已完成 |
-| - | [graduation-project](./ai-engineer-path/graduation-project/) | AI 数据分析平台 | 4 周 | 已完成 |
+| 01 | [ai-app](./ai-path/01-ai-app/) | AI 应用开发基础 | 35 | 已完成 |
+| 02 | [ai-agent-engineer](./ai-path/02-ai-agent-engineer/) | AI Agent 全栈工程师 | 52 | 已完成 |
+| 03 | [llm-eval](./ai-path/03-llm-eval/) | LLM 评估与可观测性 | 30 | 已完成 |
+| 04 | [multi-agent](./ai-path/04-multi-agent/) | 多 Agent 编排 | 30 | 已完成 |
+| 05 | [mcp-dev](./ai-path/05-mcp-dev/) | MCP 协议深度开发 | 24 | 已完成 |
+| 06 | [llm-finetuning](./ai-path/06-llm-finetuning/) | 开源模型部署与微调 | 30 | 已完成 |
+| 07 | [multimodal-ai](./ai-path/07-multimodal-ai/) | 多模态 AI 应用 | 30 | 已完成 |
+| - | [graduation-project](./ai-path/graduation-project/) | AI 数据分析平台 | 4 周 | 已完成 |
 
-### 基础技能课程
+### AI 专项进阶
 
-| 教程 | 主题 | 内容 | 状态 |
+| 课程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
-| [backend-course](./backend-course/) | 全栈后端开发 | Node.js + Express + PostgreSQL + Docker，32 课时 + 完整项目 | 已完成 |
-| [nextjs-fullstack-course](./nextjs-fullstack-course/) | Next.js 全栈产品 | App Router + Prisma + PostgreSQL + Auth + SaaS 产品，35 课时 | 已完成 |
-| [frontend-performance-course](./frontend-performance-course/) | 前端性能工程 | Core Web Vitals + React/Next 优化 + 性能监控，35 课时 | 已完成 |
+| [prompt-engineering](./ai-specialization/prompt-engineering/) | Prompt Engineering | 结构化 Prompt / 测试 / 生产级 / 高级技巧，30 课时 | 已完成 |
+| [rag-engineering](./ai-specialization/rag-engineering/) | RAG 工程化 | 检索优化 / GraphRAG / Agentic RAG / 生产部署，30 课时 | 已完成 |
+| [ai-security](./ai-specialization/ai-security/) | AI 安全与对抗 | Prompt 注入 / 越狱 / 红队测试 / 安全工程，30 课时 | 已完成 |
+| [ai-coding-engineering](./ai-specialization/ai-coding-engineering/) | AI 编程工程 | Cursor / Copilot / Prompt for Code / 团队规范，34 课时 | 已完成 |
+| [ai-product](./ai-specialization/ai-product/) | AI 产品化实战 | 从想法到上线的 AI 产品全流程，30 课时 | 已完成 |
 
-### 工程实践课程
+### 前端方向
 
-| 教程 | 主题 | 内容 | 状态 |
+| 课程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
-| [docker-cicd-course](./docker-cicd-course/) | Docker 与 CI/CD | Docker + Compose + GitHub Actions + 云部署，35 课时 | 已完成 |
-| [data-product-course](./data-product-course/) | 数据产品化 | ETL + FastAPI + Dashboard + 自动化数据产品，35 课时 | 已完成 |
-| [spider-course](./spider-course/) | Python 爬虫 | Python + requests + Playwright + Scrapy，34 课时 + 综合项目 | 已完成 |
+| [nextjs-fullstack](./frontend/nextjs-fullstack/) | Next.js 全栈产品 | App Router + Prisma + PostgreSQL + Auth + SaaS 产品，35 课时 | 已完成 |
+| [frontend-performance](./frontend/frontend-performance/) | 前端性能工程 | Core Web Vitals + React/Next 优化 + 性能监控，35 课时 | 已完成 |
+| [graphics-shader](./frontend/graphics-shader/) | 3D 图形学与 Shader | WebGL / Three.js / GLSL / 创意编码，47 课时 | 已完成 |
+| [react-native](./frontend/react-native/) | React Native 移动端 | Expo / 导航 / 原生模块 / AI 集成 / 发布增长，30 课时 | 已完成 |
 
-### 专项进阶课程
+### 后端方向
 
-| 教程 | 主题 | 内容 | 状态 |
+| 课程 | 主题 | 内容 | 状态 |
 |------|------|------|------|
-| [ai-coding-engineering-course](./ai-coding-engineering-course/) | AI 编程工程 | Cursor / Copilot / Prompt for Code / 团队规范，34 课时 | 已完成 |
-| [prompt-engineering-course](./prompt-engineering-course/) | Prompt Engineering 深度课 | 结构化 Prompt / 测试 / 生产级 / 高级技巧，30 课时 | 已完成 |
-| [ai-security-course](./ai-security-course/) | AI 安全与对抗 | Prompt 注入 / 越狱 / 红队测试 / 安全工程，30 课时 | 已完成 |
-| [rag-engineering-course](./rag-engineering-course/) | RAG 工程化 | 检索优化 / GraphRAG / Agentic RAG / 生产部署，30 课时 | 已完成 |
+| [nodejs-backend](./backend/nodejs-backend/) | 全栈后端开发 | Node.js + Express + PostgreSQL + Docker，32 课时 | 已完成 |
+| [typescript-engineering](./backend/typescript-engineering/) | TypeScript 工程化 | 类型系统 / 设计模式 / Monorepo / 测试体系 / 生产架构，30 课时 | 已完成 |
+| [python-spider](./backend/python-spider/) | Python 爬虫 | Python + requests + Playwright + Scrapy，34 课时 | 已完成 |
+
+### 工程与运维
+
+| 课程 | 主题 | 内容 | 状态 |
+|------|------|------|------|
+| [docker-cicd](./devops/docker-cicd/) | Docker 与 CI/CD | Docker + Compose + GitHub Actions + 云部署，35 课时 | 已完成 |
+| [kubernetes-cloud](./devops/kubernetes-cloud/) | 云原生与 Kubernetes | 容器编排 / Helm / GitOps / 可观测性 / Service Mesh，30 课时 | 已完成 |
+| [testing-qa](./devops/testing-qa/) | 测试与质量保障 | Vitest / Playwright / Mock / 覆盖率 / 变异测试 / CI 流水线，30 课时 | 已完成 |
+| [system-design](./devops/system-design/) | 系统设计与架构 | 需求分析 / 数据库选型 / 分布式系统 / 微服务 / 真实案例，30 课时 | 已完成 |
+
+### 数据方向
+
+| 课程 | 主题 | 内容 | 状态 |
+|------|------|------|------|
+| [data-product](./data/data-product/) | 数据产品化 | ETL + FastAPI + Dashboard + 自动化数据产品，35 课时 | 已完成 |
 
 ## 特点
 
@@ -61,14 +124,14 @@
 ```bash
 git clone <repo-url>
 cd ai-learning-tutorials
-cd backend-course
+cd backend/nodejs-backend
 # 按 README.md 中的学习路线开始
 ```
 
 AI 工程师学习路径：
 
 ```bash
-cd ai-engineer-path
+cd ai-path
 # 按路径总览的推荐顺序学习
 # 必修：01 → 02 → 03，然后按兴趣选修 04-07
 ```
@@ -76,10 +139,10 @@ cd ai-engineer-path
 也可以直接进入某门课的 final project：
 
 ```bash
-cd frontend-performance-course/final-project/performance-rescue-demo
+cd frontend/frontend-performance/final-project/performance-rescue-demo
 pnpm check
 
-cd ai-engineer-path/01-ai-app-course/final-project/ai-knowledge-workspace-kit
+cd ai-path/01-ai-app/final-project/ai-knowledge-workspace-kit
 npm run check
 npm run ingest
 npm run ask
