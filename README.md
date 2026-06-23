@@ -87,6 +87,11 @@ ai-learning-tutorials/
 | [ai-security](./ai-specialization/ai-security/) | AI 安全与对抗 | Prompt 注入 / 越狱 / 红队测试 / 安全工程，30 课时 | 已完成 |
 | [ai-coding-engineering](./ai-specialization/ai-coding-engineering/) | AI 编程工程 | Cursor / Copilot / Prompt for Code / 团队规范，34 课时 | 已完成 |
 | [ai-product](./ai-specialization/ai-product/) | AI 产品化实战 | 从想法到上线的 AI 产品全流程，30 课时 | 已完成 |
+| [ai-3d-digital-human](./ai-specialization/ai-3d-digital-human/) | AI + 3D 生成与数字人 | 3D Gaussian Splatting / 数字人驱动 / TTS / 实时交互 / 直播系统，26 课时 | 已完成 |
+| [ai-image-workflow](./ai-specialization/ai-image-workflow/) | AI 图像编辑与生成工作流 | Diffusion / ComfyUI / LoRA 训练 / 企业级图像生产，28 课时 | 已完成 |
+| [ai-data-visualization](./ai-specialization/ai-data-visualization/) | AI 数据可视化与智能报表 | NL2SQL / AI 图表生成 / 数据叙事 / 对话式 BI，30 课时 | 已完成 |
+| [ai-code-migration](./ai-specialization/ai-code-migration/) | AI 代码迁移与遗留系统现代化 | AST 分析 / AI 代码翻译 / 框架迁移 / 渐进式升级，28 课时 | 已完成 |
+| [quant-trading-ai](./ai-specialization/quant-trading-ai/) | 量化交易与金融 AI | 因子模型 / AI 预测 / 回测引擎 / 风控 / 实盘交易，34 课时 | 已完成 |
 
 ### 前端方向
 
