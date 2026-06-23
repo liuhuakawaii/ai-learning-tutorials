@@ -134,6 +134,7 @@ ai-learning-tutorials/
 | [3d-data-visualization](./frontend/3d-data-visualization/) | 3D 数据可视化 | 三维图表 / 地理信息 / 大数据渲染 / 交互式可视化，30 课时 | 已完成 |
 | [procedural-world-generation](./frontend/procedural-world-generation/) | 程序化世界生成 | 地形生成 / 城市生成 / L-System / PCG 算法 / 开放世界，30 课时 | 已完成 |
 | [performance-profiling](./frontend/performance-profiling/) | 性能分析与调优 | Chrome DevTools / 内存分析 / 渲染优化 / 性能监控体系，30 课时 | 已完成 |
+| [frontend-architecture](./frontend/frontend-architecture/) | 前端基建与架构工程 | Monorepo / 组件库 / 构建工具链 / 监控 / 性能 / 微前端 / 脚手架 / CI/CD / 安全，90 课时 | 编写中 |
 
 ### 后端方向
 
