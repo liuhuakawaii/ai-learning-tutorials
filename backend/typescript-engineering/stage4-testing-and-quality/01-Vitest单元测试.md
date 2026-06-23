@@ -1,306 +1,223 @@
-# 01 - Vitest 单元测试
+# Vitest 单元测试
 
-## 场景引入
+你接手了一个 TypeScript 项目，业务逻辑复杂，没有任何测试。每次想重构一个函数，都要手动走一遍所有调用方确认没坏。改完不敢发，发了线上炸。
 
-你接手了一个 TypeScript 项目，业务逻辑复杂，重构时总是担心破坏已有功能。手动测试效率低、覆盖不全，你需要一套可靠的自动化测试体系。Vitest 作为新一代测试框架，原生支持 TypeScript 和 ESM，正在成为越来越多团队的首选。
+这不是你能力问题，是缺安全网。单元测试就是那个安全网。
 
-## 学习目标
+## 为什么是 Vitest
 
-- 理解 Vitest 与 Jest 的差异，能在项目中正确选型
-- 掌握 Vitest 的配置方法，适配不同项目场景
-- 熟练使用 describe/it/expect 编写结构化测试
-- 掌握 Mock、Spy、快照测试等进阶技巧
-- 能够编写异步测试，处理 Promise 和定时器场景
-
-## 一、Vitest vs Jest：为什么选择 Vitest
-
-Vitest 基于 Vite 构建，天然支持 TypeScript、ESM 和 JSX，无需额外配置转译。相比 Jest，它有三个核心优势：原生 ESM 支持、共享 Vite 配置、更快的执行速度。
-
-```typescript
-// src/utils/math.ts
-export function add(a: number, b: number): number {
-  return a + b
-}
-
-export function divide(a: number, b: number): number {
-  if (b === 0) throw new Error('Division by zero')
-  return a / b
-}
-```
-
-```typescript
-// src/utils/math.test.ts
-import { describe, it, expect } from 'vitest'
-import { add, divide } from './math'
-
-describe('math utils', () => {
-  it('should add two numbers correctly', () => {
-    expect(add(1, 2)).toBe(3)
-  })
-
-  it('should throw when dividing by zero', () => {
-    expect(() => divide(1, 0)).toThrow('Division by zero')
-  })
-})
-```
-
-## 二、配置与项目搭建
+Jest 对 TypeScript 和 ESM 靠 Babel/ts-jest 补丁，配置复杂。Vitest 基于 Vite 构建，原生理解 TypeScript 和 ESM，零配置就能跑。项目用 Vite 的话，vitest 直接复用 vite.config.ts 的 alias 和 plugin，不用配两遍。
 
 ```bash
-npm install -D vitest @vitest/coverage-v8 typescript
+npm install -D vitest @vitest/coverage-v8
 ```
 
 ```typescript
 // vitest.config.ts
-import { defineConfig } from 'vitest/config'
-import path from 'path'
+import { defineConfig } from "vitest/config"
+import path from "path"
 
 export default defineConfig({
   test: {
-    globals: true,
-    environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
-    coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      include: ['src/**/*.ts'],
-      exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/types/**'],
-    },
-    setupFiles: ['./tests/setup.ts'],
+    globals: true, environment: "node",
+    include: ["src/**/*.test.ts", "src/**/*.spec.ts"],
+    coverage: { provider: "v8", reporter: ["text", "json", "html"],
+      include: ["src/**/*.ts"], exclude: ["src/**/*.test.ts", "src/types/**"] },
   },
-  resolve: {
-    alias: { '@': path.resolve(__dirname, 'src') },
-  },
+  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
 })
 ```
 
-```json
-{
-  "scripts": {
-    "test": "vitest",
-    "test:run": "vitest run",
-    "test:coverage": "vitest run --coverage"
+## 第一个测试
+
+从项目里真实存在的函数开始，不要写 `add(1, 2) === 3`：
+
+```typescript
+// src/utils/permission.ts
+type Role = "admin" | "editor" | "viewer"
+const ROLE_HIERARCHY: Record<Role, number> = { admin: 3, editor: 2, viewer: 1 }
+
+export function canAccess(userRole: Role, requiredRole: Role): boolean {
+  return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole]
+}
+
+export function filterByPermission<T extends { requiredRole: Role }>(items: T[], userRole: Role): T[] {
+  return items.filter((item) => canAccess(userRole, item.requiredRole))
+}
+```
+
+```typescript
+// src/utils/permission.test.ts
+import { describe, it, expect } from "vitest"
+import { canAccess, filterByPermission } from "./permission"
+
+describe("canAccess", () => {
+  it("admin 可以访问所有级别", () => {
+    expect(canAccess("admin", "viewer")).toBe(true)
+    expect(canAccess("admin", "editor")).toBe(true)
+  })
+  it("viewer 只能访问 viewer", () => {
+    expect(canAccess("viewer", "viewer")).toBe(true)
+    expect(canAccess("viewer", "editor")).toBe(false)
+  })
+})
+
+describe("filterByPermission", () => {
+  const articles = [
+    { title: "公开文章", requiredRole: "viewer" as Role },
+    { title: "编辑内部", requiredRole: "editor" as Role },
+  ]
+  it("viewer 只能看到公开文章", () => { expect(filterByPermission(articles, "viewer")).toHaveLength(1) })
+  it("空数组返回空数组", () => { expect(filterByPermission([], "admin")).toEqual([]) })
+})
+```
+
+运行：`npx vitest run`（单次）或 `npx vitest`（watch 模式）。
+
+## Mock：隔离外部依赖
+
+测试只验证被测函数的逻辑，不验证数据库能不能连。Mock 把外部依赖替换成假的。
+
+```typescript
+// src/services/order.ts
+export interface PaymentGateway { charge(userId: string, amount: number): Promise<{ transactionId: string }> }
+export interface OrderRepository { save(order: Order): Promise<Order>; findById(id: string): Promise<Order | null> }
+export interface Order { id: string; userId: string; amount: number; status: "pending" | "paid"; transactionId?: string }
+
+export class OrderService {
+  constructor(private repo: OrderRepository, private payment: PaymentGateway) {}
+
+  async createOrder(userId: string, amount: number): Promise<Order> {
+    return this.repo.save({ id: crypto.randomUUID(), userId, amount, status: "pending" })
+  }
+
+  async payOrder(orderId: string): Promise<Order> {
+    const order = await this.repo.findById(orderId)
+    if (!order) throw new Error("Order not found")
+    if (order.status === "paid") throw new Error("Already paid")
+    const result = await this.payment.charge(order.userId, order.amount)
+    order.status = "paid"; order.transactionId = result.transactionId
+    return this.repo.save(order)
   }
 }
 ```
 
-## 三、核心 API：describe/it/expect
-
-describe 用于组织测试用例，it 定义单个测试，expect 进行断言。
-
 ```typescript
-import { describe, it, expect } from 'vitest'
+// src/services/order.test.ts
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { OrderService, type OrderRepository, type PaymentGateway, type Order } from "./order"
 
-interface User {
-  id: string
-  name: string
-  role: 'admin' | 'user'
-}
-
-function formatUserDisplay(user: User): string {
-  const roleLabel = user.role === 'admin' ? '管理员' : '用户'
-  return `${user.name} (${roleLabel})`
-}
-
-describe('formatUserDisplay', () => {
-  it('管理员应显示管理员标签', () => {
-    const user: User = { id: '1', name: '张三', role: 'admin' }
-    expect(formatUserDisplay(user)).toBe('张三 (管理员)')
-  })
-
-  it('普通用户应显示用户标签', () => {
-    const user: User = { id: '2', name: '李四', role: 'user' }
-    expect(formatUserDisplay(user)).toBe('李四 (用户)')
-  })
-})
-```
-
-常用断言方法：`toBe`（严格相等）、`toEqual`（深度相等）、`toContain`（包含）、`toMatch`（正则匹配）、`toThrow`（异常抛出）、`toBeTruthy`/`toBeFalsy`（真假值）。
-
-## 四、Mock 与 Spy
-
-Mock 替换函数实现，Spy 监听函数调用。两者在测试隔离中至关重要。
-
-```typescript
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-
-interface EmailService {
-  send(to: string, subject: string, body: string): Promise<boolean>
-}
-
-function createNotificationManager(emailService: EmailService) {
-  return {
-    async notifyUser(userId: string, message: string) {
-      const email = `${userId}@example.com`
-      await emailService.send(email, '通知', message)
-    },
-  }
-}
-
-describe('NotificationManager', () => {
-  let mockEmailService: EmailService
-  let manager: ReturnType<typeof createNotificationManager>
+describe("OrderService", () => {
+  let service: OrderService
+  let mockRepo: OrderRepository
+  let mockPayment: PaymentGateway
 
   beforeEach(() => {
-    mockEmailService = { send: vi.fn().mockResolvedValue(true) }
-    manager = createNotificationManager(mockEmailService)
+    mockRepo = { save: vi.fn().mockImplementation(async (o: Order) => o), findById: vi.fn() }
+    mockPayment = { charge: vi.fn().mockResolvedValue({ transactionId: "txn_001" }) }
+    service = new OrderService(mockRepo, mockPayment)
   })
 
-  it('应调用邮件服务发送通知', async () => {
-    await manager.notifyUser('user1', '你有一条新消息')
-    expect(mockEmailService.send).toHaveBeenCalledWith(
-      'user1@example.com', '通知', '你有一条新消息'
-    )
+  it("创建订单应保存到仓库", async () => {
+    const order = await service.createOrder("user_001", 9900)
+    expect(mockRepo.save).toHaveBeenCalledOnce()
+    expect(order.status).toBe("pending")
+  })
+
+  it("支付订单应调用支付网关", async () => {
+    vi.mocked(mockRepo.findById).mockResolvedValue({ id: "o1", userId: "u1", amount: 9900, status: "pending" })
+    const result = await service.payOrder("o1")
+    expect(mockPayment.charge).toHaveBeenCalledWith("u1", 9900)
+    expect(result.status).toBe("paid")
+  })
+
+  it("订单不存在时应抛出错误", async () => {
+    vi.mocked(mockRepo.findById).mockResolvedValue(null)
+    await expect(service.payOrder("nonexistent")).rejects.toThrow("Order not found")
   })
 })
 ```
 
-模块级 Mock 使用 `vi.mock()` 替换整个模块，`vi.mocked()` 获取类型安全的 Mock 引用。
+`vi.fn()` 创建假函数，记录调用次数和参数。`vi.mocked()` 加上类型，方便 `.mockResolvedValue()` 等方法的推导。
 
-## 五、快照测试与覆盖率
-
-快照测试适合验证复杂输出结构是否发生变化。
+## Mock 全局 fetch
 
 ```typescript
-import { describe, it, expect } from 'vitest'
+const mockFetch = vi.fn()
+vi.stubGlobal("fetch", mockFetch)
 
-function buildApiResponse<T>(data: T, message = 'success') {
-  return { code: 200, message, data, timestamp: Date.now() }
-}
+beforeEach(() => { mockFetch.mockReset() })
 
-describe('API 响应构建', () => {
-  it('应生成正确的响应结构', () => {
-    const response = buildApiResponse({ id: 1, name: '测试' })
-    expect(response).toMatchSnapshot({ timestamp: expect.any(Number) })
-  })
+it("应返回城市温度", async () => {
+  mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ temperature: 28 }) })
+  const temp = await getCityTemperature("北京")
+  expect(temp).toBe(28)
 })
 ```
 
-覆盖率阈值配置：
+## 快照测试
+
+快照适合验证"复杂对象的结构没有意外变化"。Vitest 把第一次结果存成文件，后续运行对比。
+
+```typescript
+it("生产环境配置结构应保持稳定", () => {
+  expect(buildAppConfig("prod")).toMatchSnapshot()
+})
+```
+
+陷阱：输出频繁变化时快照不断更新，最终没人看 diff 就 `--update`。快照适合稳定的数据结构，不适合频繁变动的 UI 输出。
+
+## 异步测试
+
+```typescript
+import { vi } from "vitest"
+
+it("应正确模拟时间推进", () => {
+  vi.useFakeTimers()
+  let count = 0
+  const timer = setInterval(() => { count++ }, 1000)
+  vi.advanceTimersByTime(3000)
+  expect(count).toBe(3)
+  clearInterval(timer)
+  vi.useRealTimers()
+})
+```
+
+`vi.useFakeTimers()` 替换定时器为可控的假定时器。`vi.advanceTimersByTime(3000)` 快进 3 秒，不用真的等。
+
+## 覆盖率
+
+```bash
+npx vitest run --coverage
+```
+
+设阈值，CI 里低于就失败：
 
 ```typescript
 // vitest.config.ts
-coverage: {
-  thresholds: {
-    statements: 80,
-    branches: 75,
-    functions: 80,
-    lines: 80,
-  },
-}
+coverage: { thresholds: { statements: 80, branches: 75, functions: 80, lines: 80 } }
 ```
 
-## 六、异步测试
-
-```typescript
-import { describe, it, expect, vi } from 'vitest'
-
-describe('异步操作', () => {
-  it('应正确处理成功的 Promise', async () => {
-    const result = await Promise.resolve('成功')
-    expect(result).toBe('成功')
-  })
-
-  it('应捕获 rejected 的 Promise', async () => {
-    await expect(Promise.reject(new Error('失败'))).rejects.toThrow('失败')
-  })
-})
-
-describe('定时器操作', () => {
-  it('应模拟定时器执行', () => {
-    vi.useFakeTimers()
-    let count = 0
-    const timer = setInterval(() => { count++ }, 1000)
-
-    vi.advanceTimersByTime(3000)
-    expect(count).toBe(3)
-
-    clearInterval(timer)
-    vi.useRealTimers()
-  })
-})
-```
-
-## 常见误区
-
-1. **过度 Mock**：Mock 应该只用于外部依赖（网络请求、数据库、文件系统），不要 Mock 被测模块的内部逻辑，否则测试失去意义。
-
-2. **测试实现细节**：不要断言函数内部调用了哪些私有方法，应该断言函数的输入输出行为。测试应该能承受重构而不失败。
-
-3. **忽略边界条件**：只测试正常路径是不够的。空数组、null 值、超大输入等边界场景才是 bug 的高发区。
-
-4. **快照测试滥用**：快照测试适合验证稳定的数据结构，不适合频繁变化的 UI 输出。过大的快照文件难以审查。
-
-## 工程建议
-
-1. **测试文件就近放置**：将 `*.test.ts` 文件放在被测代码旁边，而不是集中在一个 `tests/` 目录。这样更容易发现哪些模块缺少测试。
-
-2. **使用 describe 分层组织**：第一层按模块划分，第二层按函数划分，第三层按场景划分。测试报告的结构清晰，失败时能快速定位。
-
-3. **beforeEach 清理状态**：每个测试用例应该相互独立，不依赖执行顺序。使用 `beforeEach` 重置 Mock，避免测试之间的状态污染。
-
-4. **覆盖率是底线不是目标**：80% 的行覆盖率是合理的底线，但不要追求 100%。覆盖率只能告诉你哪些代码没有被测到，不能告诉你测试质量如何。
-
-## 小结
-
-本课学习了 Vitest 的核心用法：从项目配置到基本 API，从 Mock/Spy 到异步测试。Vitest 原生支持 TypeScript 和 ESM，配合 Vite 生态，在现代前端项目中具有明显优势。
+80% 是合理底线。追求 100% 的代价是给不可能出 bug 的代码写测试，收益递减。覆盖率告诉你"哪些代码没被测到"，不告诉你"测的质量怎么样"。
 
 ## 练习
 
-### 练习一：基础测试编写
-
-为以下函数编写完整的单元测试，覆盖正常情况和边界条件：
+### 练习一：为权限函数写测试
 
 ```typescript
-export function parseQueryString(url: string): Record<string, string> {
-  const questionMarkIndex = url.indexOf('?')
-  if (questionMarkIndex === -1) return {}
-  const queryString = url.slice(questionMarkIndex + 1)
-  if (!queryString) return {}
-  return queryString.split('&').reduce((params, pair) => {
-    const [key, value] = pair.split('=')
-    params[decodeURIComponent(key)] = decodeURIComponent(value || '')
-    return params
-  }, {} as Record<string, string>)
+type Permission = "read" | "write" | "delete"
+function checkPermission(userPermissions: Permission[], required: Permission): boolean {
+  return userPermissions.includes(required)
 }
 ```
 
-### 练习二：Mock 与异步测试
+### 练习二：Mock 外部 API
 
-编写测试验证以下函数的异步行为，使用 Mock 模拟网络请求：
+用 `vi.stubGlobal("fetch", ...)` Mock 全局 fetch，为 `fetchUserProfile(userId)` 写测试，覆盖成功和失败路径。
 
-```typescript
-async function fetchWithRetry(
-  url: string,
-  options = { retries: 3, retryDelay: 1000 }
-): Promise<unknown> {
-  for (let i = 0; i <= options.retries; i++) {
-    try {
-      const response = await fetch(url)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      return await response.json()
-    } catch (error) {
-      if (i === options.retries) throw error
-      await new Promise((r) => setTimeout(r, options.retryDelay * Math.pow(2, i)))
-    }
-  }
-}
-```
+### 练习三：快照 + 行为混合测试
 
-### 练习三：快照测试
-
-为一个配置生成器函数编写快照测试，验证输出结构的稳定性：
-
-```typescript
-function createConfig(env: 'dev' | 'staging' | 'prod') {
-  const configs = {
-    dev: { database: { host: 'localhost', port: 5432, pool: 5 }, cache: { enabled: false, ttl: 0 }, logging: { level: 'debug', format: 'pretty' } },
-    staging: { database: { host: 'staging-db.internal', port: 5432, pool: 10 }, cache: { enabled: true, ttl: 300 }, logging: { level: 'info', format: 'json' } },
-    prod: { database: { host: 'prod-db.internal', port: 5432, pool: 20 }, cache: { enabled: true, ttl: 3600 }, logging: { level: 'warn', format: 'json' } },
-  }
-  return configs[env]
-}
-```
+给 `createErrorResponse(code, message)` 写测试，快照测试验证结构，行为测试验证消息格式。
 
 ---
 
@@ -308,94 +225,39 @@ function createConfig(env: 'dev' | 'staging' | 'prod') {
 
 ### 练习一
 
-**思路**：测试无参数、空参数、单参数、多参数、特殊字符编码等场景。
-
-**答案**：
-
 ```typescript
-import { describe, it, expect } from 'vitest'
-import { parseQueryString } from './parseQueryString'
-
-describe('parseQueryString', () => {
-  it('无查询参数时应返回空对象', () => {
-    expect(parseQueryString('https://example.com')).toEqual({})
-  })
-  it('只有 ? 没有参数时应返回空对象', () => {
-    expect(parseQueryString('https://example.com?')).toEqual({})
-  })
-  it('应解析多个参数', () => {
-    expect(parseQueryString('https://example.com?a=1&b=2')).toEqual({ a: '1', b: '2' })
-  })
-  it('应处理 URL 编码的字符', () => {
-    expect(parseQueryString('https://example.com?name=%E5%BC%A0%E4%B8%89')).toEqual({ name: '张三' })
-  })
-  it('应处理没有值的参数', () => {
-    expect(parseQueryString('https://example.com?key')).toEqual({ key: '' })
-  })
+describe("checkPermission", () => {
+  it("有权限时返回 true", () => { expect(checkPermission(["read", "write"], "read")).toBe(true) })
+  it("没有权限时返回 false", () => { expect(checkPermission(["read"], "write")).toBe(false) })
+  it("空权限列表返回 false", () => { expect(checkPermission([], "read")).toBe(false) })
 })
 ```
-
-**要点**：空输入和边界条件是测试重点；URL 编码是常见遗漏点。
 
 ### 练习二
 
-**思路**：使用 `vi.useFakeTimers()` 控制时间，`vi.stubGlobal` 替换 `fetch`。
-
-**答案**：
-
 ```typescript
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fetchWithRetry } from './fetchWithRetry'
+const mockFetch = vi.fn()
+vi.stubGlobal("fetch", mockFetch)
 
-describe('fetchWithRetry', () => {
-  beforeEach(() => { vi.useFakeTimers() })
-  afterEach(() => { vi.useRealTimers() })
-
-  it('首次请求成功时应直接返回结果', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true, json: () => Promise.resolve({ id: 1 }),
-    }))
-    const result = await fetchWithRetry('https://api.example.com/data')
-    expect(result).toEqual({ id: 1 })
-    expect(fetch).toHaveBeenCalledTimes(1)
+describe("fetchUserProfile", () => {
+  beforeEach(() => { mockFetch.mockReset() })
+  it("应返回用户资料", async () => {
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ id: "1", name: "张三" }) })
+    expect((await fetchUserProfile("1")).name).toBe("张三")
   })
-
-  it('超过重试次数时应抛出错误', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('持续失败')))
-    const promise = fetchWithRetry('https://api.example.com/data', { retries: 2, retryDelay: 1000 })
-    await vi.advanceTimersByTimeAsync(1000)
-    await vi.advanceTimersByTimeAsync(2000)
-    await expect(promise).rejects.toThrow('持续失败')
-    expect(fetch).toHaveBeenCalledTimes(3)
+  it("用户不存在时应抛出错误", async () => {
+    mockFetch.mockResolvedValue({ ok: false })
+    await expect(fetchUserProfile("999")).rejects.toThrow("User 999 not found")
   })
 })
 ```
-
-**要点**：`vi.useFakeTimers()` 避免测试等待真实延迟；`vi.stubGlobal` 替换全局 `fetch`。
 
 ### 练习三
 
-**思路**：为三种环境分别编写快照测试，并验证业务逻辑。
-
-**答案**：
-
 ```typescript
-import { describe, it, expect } from 'vitest'
-import { createConfig } from './createConfig'
-
-describe('createConfig', () => {
-  it('开发环境配置应保持稳定', () => { expect(createConfig('dev')).toMatchSnapshot() })
-  it('预发布环境配置应保持稳定', () => { expect(createConfig('staging')).toMatchSnapshot() })
-  it('生产环境配置应保持稳定', () => { expect(createConfig('prod')).toMatchSnapshot() })
-
-  it('各环境的数据库连接池大小应递增', () => {
-    const dev = createConfig('dev')
-    const staging = createConfig('staging')
-    const prod = createConfig('prod')
-    expect(dev.database.pool).toBeLessThan(staging.database.pool)
-    expect(staging.database.pool).toBeLessThan(prod.database.pool)
-  })
-})
+function createErrorResponse(code: number, message: string) {
+  return { success: false, error: { code, message, timestamp: Date.now() } }
+}
+// 快照验证结构：expect(createErrorResponse(404, "不存在")).toMatchSnapshot({ error: { timestamp: expect.any(Number) } })
+// 行为验证消息：expect(createErrorResponse(500, "内部错误").error.code).toBe(500)
 ```
-
-**要点**：快照测试验证整体结构，行为测试验证业务逻辑；使用 `vitest run --update` 更新快照。

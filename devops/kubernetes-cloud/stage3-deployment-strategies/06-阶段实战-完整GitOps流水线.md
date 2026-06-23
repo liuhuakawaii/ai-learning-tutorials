@@ -1,205 +1,89 @@
 # 阶段实战：完整 GitOps 流水线
 
-## 场景引入
+> 前置知识：Helm、蓝绿部署、金丝雀发布、GitOps 工作流、多环境管理（Stage 3 第 1-5 课）
 
-Stage 3 前 5 课你学习了 Helm、蓝绿部署、金丝雀发布、GitOps 工作流和多环境管理。现在是时候把这些技能串联起来，搭建一条完整的端到端 GitOps 流水线：从代码提交到自动构建、自动部署、渐进式发布，全程无需手动 kubectl。
+## 你要做什么
 
-## 学习目标
+搭建一条完整的 GitOps 流水线：代码提交 → 自动构建 → 推送镜像 → ArgoCD 同步部署 → 金丝雀发布。
 
-1. 搭建完整的 GitOps 工作流
-2. 配置 ArgoCD 管理多环境应用
-3. 设计 CI/CD 流水线集成 GitOps
-4. 实现金丝雀发布策略
+全程无需手动 kubectl。
 
 ## 整体架构
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                      GitOps 流水线                        │
-│                                                          │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐          │
-│  │开发者     │───►│应用仓库   │───►│CI Pipeline│          │
-│  │提交代码   │    │(源代码)   │    │(GitHub    │          │
-│  └──────────┘    └──────────┘    │ Actions)  │          │
-│                                   └────┬─────┘          │
-│                                        │                 │
-│                              ┌─────────▼──────────┐     │
-│                              │构建镜像 + 更新       │     │
-│                              │GitOps 仓库的镜像 tag │     │
-│                              └─────────┬──────────┘     │
-│                                        │                 │
-│                              ┌─────────▼──────────┐     │
-│                              │GitOps 仓库          │     │
-│                              │(K8s manifests)      │     │
-│                              └─────────┬──────────┘     │
-│                                        │                 │
-│                              ┌─────────▼──────────┐     │
-│                              │ArgoCD 监听变更      │     │
-│                              │自动同步到集群        │     │
-│                              └─────────┬──────────┘     │
-│                                        │                 │
-│                    ┌───────────────────┼──────────┐     │
-│                    ▼                   ▼          ▼     │
-│              ┌──────────┐      ┌──────────┐ ┌────────┐ │
-│              │Dev 环境   │      │Staging   │ │Prod    │ │
-│              │自动部署   │      │手动 Promotion│ │金丝雀 │ │
-│              └──────────┘      └──────────┘ └────────┘ │
-└──────────────────────────────────────────────────────────┘
+开发者推送代码
+    ↓
+GitHub Actions CI
+    ├── lint + test + build
+    ├── 构建 Docker 镜像
+    ├── 推送到 GHCR
+    └── 更新 GitOps 仓库中的镜像 tag
+            ↓
+    ArgoCD 检测到 Git 变更
+    ├── 同步到 K8s 集群
+    └── 执行金丝雀发布策略
 ```
 
-## Step 1：准备 GitOps 仓库结构
+## 第一步：ArgoCD 安装
+
+```bash
+# 创建 namespace
+kubectl create namespace argocd
+
+# 安装 ArgoCD
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# 获取初始密码
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+
+# 端口转发
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+# 登录
+argocd login localhost:8080 --username admin --password <password> --insecure
+```
+
+## 第二步：GitOps 仓库结构
 
 ```
 gitops-repo/
 ├── apps/
-│   └── my-app/
-│       ├── base/
-│       │   ├── kustomization.yaml
-│       │   ├── deployment.yaml
-│       │   ├── service.yaml
-│       │   └── ingress.yaml
-│       └── overlays/
-│           ├── dev/
-│           │   ├── kustomization.yaml
-│           │   └── config-patch.yaml
-│           ├── staging/
-│           │   ├── kustomization.yaml
-│           │   └── config-patch.yaml
-│           └── prod/
-│               ├── kustomization.yaml
-│               ├── config-patch.yaml
-│               └── hpa.yaml
-├── argocd/
-│   ├── app-of-apps.yaml
-│   ├── dev-app.yaml
-│   ├── staging-app.yaml
-│   └── prod-app.yaml
-└── infrastructure/
-    └── namespaces.yaml
+│   ├── my-app/
+│   │   ├── base/
+│   │   │   ├── kustomization.yaml
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   └── ingress.yaml
+│   │   └── overlays/
+│   │       ├── staging/
+│   │       │   ├── kustomization.yaml
+│   │       │   └── replica-count.yaml
+│   │       └── production/
+│   │           ├── kustomization.yaml
+│   │           └── replica-count.yaml
+└── argocd/
+    ├── staging-app.yaml
+    └── production-app.yaml
 ```
 
-### base 配置
+### ArgoCD Application 定义
 
 ```yaml
-# apps/my-app/base/deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: my-app
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-        - name: app
-          image: my-app:latest
-          ports:
-            - containerPort: 8080
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8080
-            periodSeconds: 10
-```
-
-```yaml
-# apps/my-app/base/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - deployment.yaml
-  - service.yaml
-  - ingress.yaml
-commonLabels:
-  app: my-app
-```
-
-### 环境覆盖
-
-```yaml
-# apps/my-app/overlays/prod/kustomization.yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - ../../base
-  - hpa.yaml
-namespace: production
-patches:
-  - path: config-patch.yaml
-```
-
-```yaml
-# apps/my-app/overlays/prod/config-patch.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-        - name: app
-          resources:
-            requests:
-              cpu: 250m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-```
-
-## Step 2：安装和配置 ArgoCD
-
-```bash
-# 安装 ArgoCD
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-# 等待就绪
-kubectl wait --for=condition=Ready pods --all -n argocd --timeout=180s
-
-# 获取初始密码
-ARGO_PWD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
-echo "ArgoCD password: $ARGO_PWD"
-
-# 端口转发
-kubectl port-forward svc/argocd-server -n argocd 8080:443 &
-```
-
-### 创建 ArgoCD Applications
-
-```yaml
-# argocd/dev-app.yaml
+# argocd/staging-app.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: my-app-dev
+  name: my-app-staging
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://github.com/myteam/gitops-repo.git
-    targetRevision: develop
-    path: apps/my-app/overlays/dev
+    repoURL: https://github.com/your-org/gitops-repo.git
+    targetRevision: main
+    path: apps/my-app/overlays/staging
   destination:
     server: https://kubernetes.default.svc
-    namespace: dev
+    namespace: my-app-staging
   syncPolicy:
     automated:
       prune: true
@@ -208,41 +92,17 @@ spec:
       - CreateNamespace=true
 ```
 
-```yaml
-# argocd/prod-app.yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: my-app-prod
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/myteam/gitops-repo.git
-    targetRevision: main
-    path: apps/my-app/overlays/prod
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: production
-  syncPolicy:
-    syncOptions:
-      - CreateNamespace=true
-  # 生产环境手动同步
-```
+`automated` + `selfHeal` 表示 ArgoCD 会自动同步 Git 变更到集群，并且如果有人手动修改了集群状态，ArgoCD 会自动恢复。
 
-```bash
-kubectl apply -f argocd/dev-app.yaml
-kubectl apply -f argocd/prod-app.yaml
-```
-
-## Step 3：配置 CI Pipeline
+## 第三步：CI 流水线
 
 ```yaml
-# .github/workflows/ci.yaml
-name: CI/CD Pipeline
+# .github/workflows/ci-cd.yml
+name: CI/CD
+
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
   build:
@@ -251,73 +111,28 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build and push image
-        run: |
-          docker build -t my-app:${{ github.sha }} .
-          docker push my-app:${{ github.sha }}
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ghcr.io/your-org/my-app:${{ github.sha }}
 
-      - name: Update GitOps repo (dev)
-        if: github.ref == 'refs/heads/develop'
+      - name: Update GitOps repo
         run: |
-          # 更新 dev overlay 的镜像 tag
+          git clone https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/your-org/gitops-repo.git
           cd gitops-repo
-          kustomize edit set image my-app=my-app:${{ github.sha }}
-          git commit -am "chore: update dev image to ${{ github.sha }}"
-          git push
-
-      - name: Update GitOps repo (prod)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          cd gitops-repo
-          cd apps/my-app/overlays/prod
-          kustomize edit set image my-app=my-app:${{ github.sha }}
-          git commit -am "chore: update prod image to ${{ github.sha }}"
+          # 更新 staging 的镜像 tag
+          cd apps/my-app/overlays/staging
+          kustomize edit set image ghcr.io/your-org/my-app=ghcr.io/your-org/my-app:${{ github.sha }}
+          git add .
+          git commit -m "chore: update staging image to ${{ github.sha }}"
           git push
 ```
 
-## Step 4：环境 Promotion 流程
+## 第四步：金丝雀发布
 
-```
-Develop 分支推送 → 自动部署到 Dev
-        │
-   在 Dev 验证通过
-        │
-   创建 PR 到 main 分支
-        │
-   代码审核通过，合并
-        │
-   CI 更新 GitOps 仓库 prod overlay
-        │
-   ArgoCD 显示 OutOfSync
-        │
-   在 ArgoCD UI 手动点击 Sync
-        │
-   生产环境更新完成
-```
-
-## Step 5：监控和验证
-
-```bash
-# 查看 ArgoCD 应用状态
-argocd app list
-argocd app get my-app-dev
-argocd app get my-app-prod
-
-# 查看同步历史
-argocd app history my-app-prod
-
-# 手动同步生产环境
-argocd app sync my-app-prod
-
-# 回滚到上一个版本
-argocd app rollback my-app-prod 1
-```
-
-## 金丝雀发布集成
-
-使用 Argo Rollouts 实现金丝雀发布：
+用 Argo Rollouts 实现金丝雀：
 
 ```yaml
-# 替换 Deployment 为 Rollout
 apiVersion: argoproj.io/v1alpha1
 kind: Rollout
 metadata:
@@ -333,68 +148,58 @@ spec:
         app: my-app
     spec:
       containers:
-        - name: app
-          image: my-app:1.0.0
+        - name: my-app
+          image: ghcr.io/your-org/my-app:latest
   strategy:
     canary:
       steps:
         - setWeight: 10
-        - pause: {duration: 5m}
-        - setWeight: 30
-        - pause: {duration: 5m}
-        - setWeight: 60
-        - pause: {duration: 5m}
+        - pause: { duration: 5m }
+        - setWeight: 50
+        - pause: { duration: 5m }
         - setWeight: 100
-      canaryService: my-app-canary
-      stableService: my-app-stable
-      trafficRouting:
-        nginx:
-          stableIngress: my-app-ingress
 ```
 
-## 常见误区
+金丝雀发布流程：
 
-**误区一："GitOps 不需要 CI"**
+```
+v1 (3 个副本)
+    ↓
+v2 (10% 流量) → 观察 5 分钟 → 指标正常？
+    ↓ 是
+v2 (50% 流量) → 观察 5 分钟 → 指标正常？
+    ↓ 是
+v2 (100% 流量) → 发布完成
+    ↓ 否
+自动回滚到 v1
+```
 
-GitOps 只管 CD 部分。CI 负责构建镜像、运行测试、更新 GitOps 仓库。
+## 验证
 
-**误区二："生产环境自动同步"**
+```bash
+# 查看 ArgoCD 应用状态
+argocd app get my-app-staging
 
-生产环境建议手动同步，避免未经审核的变更直接上线。开发环境可以自动同步。
+# 手动触发同步
+argocd app sync my-app-staging
 
-## 工程建议
-
-1. **开发环境自动同步，生产环境手动同步**
-2. **保护 main 分支**：所有变更通过 PR 审核
-3. **使用 ApplicationSet 管理多环境**：避免重复配置
-4. **监控 ArgoCD 同步状态**：同步失败时发送告警
-5. **定期备份 ArgoCD 配置**
-
-## 小结
-
-- 完整的 GitOps 流水线：CI 构建 → 更新 GitOps 仓库 → ArgoCD 同步到集群
-- Kustomize base + overlays 管理多环境配置
-- ArgoCD Application 管理每个环境的同步策略
-- 生产环境使用手动同步 + 金丝雀发布
-- 环境 Promotion 通过 Git 分支和 PR 审核实现
+# 查看金丝雀发布状态
+kubectl argo rollouts get rollout my-app -n my-app-staging
+```
 
 ## 练习
 
-### 练习一：端到端 GitOps
+### 练习一：多环境配置
 
-完成以下操作：
-1. 创建 GitOps 仓库结构
-2. 安装 ArgoCD
-3. 配置 dev 和 prod 两个 Application
-4. 修改 GitOps 仓库中的镜像 tag
-5. 验证 dev 自动同步，prod 需要手动同步
+在 GitOps 仓库中创建 production overlay，设置副本数为 5、资源限制更高。创建 ArgoCD Application 部署到 production namespace。
 
-### 练习二：回滚实践
+### 练习二：回滚
 
-模拟一次有问题的部署：
-1. 将镜像 tag 改为一个不存在的版本
-2. 观察 ArgoCD 同步失败
-3. 使用 ArgoCD 回滚到上一个正常版本
+模拟金丝雀发布失败：手动把镜像 tag 改成一个不存在的版本。观察 Argo Rollouts 是否自动回滚。
+
+### 练习三：通知
+
+配置 ArgoCD 的通知，在同步成功或失败时发送 Slack 消息。
 
 ---
 
@@ -402,53 +207,55 @@ GitOps 只管 CD 部分。CI 负责构建镜像、运行测试、更新 GitOps �
 
 ### 练习一
 
-**答案**：
+```yaml
+# apps/my-app/overlays/production/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patchesStrategicMerge:
+  - replica-count.yaml
+images:
+  - name: ghcr.io/your-org/my-app
+    newTag: v1.0.0
+```
 
-按照本课 Step 1-3 的指导完成 GitOps 仓库创建、ArgoCD 安装和 Application 配置。关键验证点：
-
-```bash
-# dev 环境自动同步
-argocd app get my-app-dev
-# Status: Synced
-
-# 修改 Git 中 dev overlay 的镜像 tag
-# 等待 3 分钟（ArgoCD 默认同步周期）
-argocd app get my-app-dev
-# 应该看到新的镜像 tag
-
-# prod 环境需要手动同步
-argocd app get my-app-prod
-# Status: OutOfSync
-argocd app sync my-app-prod
+```yaml
+# replica-count.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 5
 ```
 
 ### 练习二
 
-**答案**：
-
 ```bash
-# 1. 将镜像 tag 改为不存在的版本
-# 编辑 GitOps 仓库中的 deployment，设置 image: my-app:nonexistent
+# 更新镜像为不存在的 tag
+kubectl set image rollout/my-app my-app=ghcr.io/your-org/my-app:nonexistent -n my-app-staging
 
-# 2. 同步
-argocd app sync my-app-prod
-
-# 3. 观察状态
-argocd app get my-app-prod
-# Health: Degraded
-# Pod 状态: ImagePullBackOff
-
-# 4. 回滚
-argocd app history my-app-prod
-# 找到上一个正常版本的 revision
-argocd app rollback my-app-prod <revision>
-
-# 5. 验证恢复
-argocd app get my-app-prod
-# Health: Healthy
+# 观察
+kubectl argo rollouts get rollout my-app -n my-app-staging
+# 状态会从 Progressing → Degraded → 自动回滚到上一个版本
 ```
 
-**要点**：
-- ArgoCD 的回滚是通过重新应用旧版本的配置实现的
-- 回滚后需要手动同步或等待自动同步
-- 生产环境应该设置告警，同步失败时及时通知
+### 练习三
+
+```yaml
+# argocd-notifications-cm ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.slack: |
+    token: $slack-token
+  template.app-sync-succeeded: |
+    message: |
+      Application {{.app.metadata.name}} sync succeeded.
+  trigger.on-sync-succeeded: |
+    - send: [app-sync-succeeded]
+```

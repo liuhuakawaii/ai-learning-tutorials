@@ -1,453 +1,198 @@
-# WebXR API 入门
+# WebXR API 入门：让浏览器启动 AR/VR 会话
 
-## 场景引入
+## 当前项目状态
 
-你已经了解了空间计算的基本概念——坐标系、变换矩阵、四元数。现在的问题是：如何在浏览器中真正启动一个 AR 或 VR 会话？设备的摄像头画面怎么获取？头显的位置追踪数据怎么拿到？
+你的 3D 场景已经在浏览器里跑起来了——Three.js 渲染、光照、交互都没问题。但用户还坐在电脑前用鼠标操作。下一步是让这个场景进入 XR 设备：戴上头显，看到虚拟物体出现在真实环境中。
 
-WebXR Device API 就是浏览器提供的标准化接口，它抽象了底层硬件差异，让你用统一的 API 访问 AR/VR 设备的能力。本课将从最基础的概念开始：会话（Session）、参考空间（Reference Space）和帧循环（Frame Loop）。
+WebXR Device API 是浏览器提供的标准化接口。它不关心你用的是 Quest、Vision Pro 还是 HoloLens，用同一套 API 就能访问所有 XR 设备的能力。
 
-## 学习目标
+## 三个核心概念
 
-- 理解 WebXR Device API 的核心架构
-- 掌握 XRSession 的创建、配置和生命周期
-- 理解不同参考空间类型及其适用场景
-- 掌握 XRFrame 回调与渲染循环的协作方式
-- 能编写基础的 WebXR 启动代码
-
-## WebXR 架构概览
-
-WebXR 的核心设计遵循「会话驱动」模型。整个交互过程可以抽象为三个阶段：
-
-1. **能力检测**：确认当前设备是否支持所需的 XR 功能
-2. **会话创建**：请求一个特定类型的 XR 会话
-3. **帧循环**：在每帧中获取追踪数据并渲染
+WebXR 的整个设计围绕三个东西：
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  WebXR Device API                │
-├─────────────────────────────────────────────────┤
-│  navigator.xr.requestSession()                   │
-│         ↓                                        │
-│  XRSession                                       │
-│    ├── requestReferenceSpace()                   │
-│    ├── requestAnimationFrame() → XRFrame         │
-│    │     ├── getViewerPose()                     │
-│    │     ├── getHitTestResults()                 │
-│    │     └── inputSources (controllers)          │
-│    └── end()                                     │
-└─────────────────────────────────────────────────┘
+XRSession     → 一次 AR/VR 会话，从创建到结束
+ReferenceSpace → 空间坐标系的基准点
+XRFrame        → 每帧的追踪数据和渲染时机
 ```
+
+搞清楚这三个，WebXR 就通了大半。
 
 ## 能力检测
 
-在请求会话之前，必须先确认设备是否支持 WebXR 以及所需的特性。WebXR 提供了 `isSessionSupported` 方法用于快速检测。
+请求会话之前必须确认设备支持：
 
 ```typescript
-// 检测是否支持沉浸式 AR 会话
-async function checkARSupport(): Promise<boolean> {
+async function checkXRSupport() {
   if (!navigator.xr) {
-    console.warn('当前浏览器不支持 WebXR');
-    return false;
+    console.warn('当前浏览器不支持 WebXR')
+    return null
   }
-  return await navigator.xr.isSessionSupported('immersive-ar');
+
+  const [vr, ar] = await Promise.all([
+    navigator.xr.isSessionSupported('immersive-vr'),
+    navigator.xr.isSessionSupported('immersive-ar')
+  ])
+
+  // 优先 AR，回退 VR
+  if (ar) return 'immersive-ar'
+  if (vr) return 'immersive-vr'
+  return null
 }
-
-// 检测是否支持沉浸式 VR 会话
-async function checkVRSupport(): Promise<boolean> {
-  if (!navigator.xr) {
-    console.warn('当前浏览器不支持 WebXR');
-    return false;
-  }
-  return await navigator.xr.isSessionSupported('immersive-vr');
-}
 ```
 
-WebXR 定义了三种会话模式：
+`immersive-ar` 和 `immersive-vr` 是两种会话模式。AR 模式下摄像头画面作为背景，VR 模式下完全由你控制渲染内容。
 
-| 模式 | 说明 | 典型设备 |
-|------|------|----------|
-| `immersive-ar` | 沉浸式 AR，叠加虚拟内容到真实世界 | 手机、AR 眼镜 |
-| `immersive-vr` | 沉浸式 VR，完全替换视觉输入 | VR 头显 |
-| `inline` | 内联模式，在网页中显示 XR 内容 | 任何设备 |
-
-## XRSession 生命周期
-
-XRSession 是 WebXR 的核心对象，代表一次 AR/VR 交互会话。它的生命周期如下：
-
-```
-请求会话 → 会话创建 → 活跃状态 → 会话结束
-   ↑          ↓          ↓          ↓
-requestSession  配置参考空间  帧循环渲染  释放资源
-```
-
-### 创建会话
+## 创建会话
 
 ```typescript
-// 定义会话特性请求
-const xrSessionInit: XRSessionInit = {
-  requiredFeatures: ['local-floor'],      // 必须支持的特性
-  optionalFeatures: ['hit-test', 'anchors'], // 可选特性
-  domOverlay: { root: document.getElementById('overlay') } // DOM 叠加层
-};
+async function startXRSession(mode: XRSessionMode) {
+  const session = await navigator.xr.requestSession(mode, {
+    requiredFeatures: ['local-floor'],      // 必须有地面参考
+    optionalFeatures: ['hand-tracking', 'hit-test'] // 可选
+  })
 
-// 请求 AR 会话
-async function startARSession(): Promise<XRSession> {
-  if (!navigator.xr) {
-    throw new Error('WebXR 不可用');
-  }
-
-  const supported = await navigator.xr.isSessionSupported('immersive-ar');
-  if (!supported) {
-    throw new Error('当前设备不支持沉浸式 AR');
-  }
-
-  const session = await navigator.xr.requestSession('immersive-ar', xrSessionInit);
-
-  // 监听会话结束事件
   session.addEventListener('end', () => {
-    console.log('XR 会话已结束');
-    // 清理资源、重置 UI
-    cleanupXRResources();
-  });
+    console.log('XR 会话结束')
+  })
 
-  return session;
+  return session
 }
 ```
 
-### 会话特性请求的策略
-
-`requiredFeatures` 和 `optionalFeatures` 的区别直接影响会话创建的成败：
-
-- **requiredFeatures**：如果设备不支持其中任何一个特性，`requestSession` 会直接抛出异常
-- **optionalFeatures**：设备不支持时仍可正常创建会话，但对应功能不可用
-
-```typescript
-// 错误做法：把非必需特性放到 requiredFeatures
-const badConfig: XRSessionInit = {
-  requiredFeatures: ['local-floor', 'hit-test', 'anchors', 'hand-tracking']
-  // 如果设备不支持手部追踪，整个会话创建都会失败
-};
-
-// 正确做法：区分必需和可选
-const goodConfig: XRSessionInit = {
-  requiredFeatures: ['local-floor'],
-  optionalFeatures: ['hit-test', 'anchors', 'hand-tracking']
-  // 即使设备不支持手部追踪，会话仍然可以创建
-};
-```
+`requiredFeatures` 里声明的功能如果设备不支持，会话创建会失败。`optionalFeatures` 不影响创建，运行时再检测。
 
 ## 参考空间
 
-参考空间（Reference Space）是 WebXR 中最容易被误解的概念之一。它定义了追踪数据的坐标原点和范围。
+参考空间决定了坐标系的原点在哪里：
 
-### 为什么需要参考空间
+```
+local          → 原点在用户启动会话时的位置
+               → 头显移动后原点不动
+               → 适合小范围体验
 
-追踪数据本质上是相对于某个物理点的位移和旋转。不同应用场景需要不同的原点：
+local-floor    → 原点在用户脚下的地面上
+               → 比 local 多了地面高度偏移
+               → 大多数 VR 应用用这个
 
-- AR 应用：原点通常在用户脚下或设备初始位置
-- VR 房间级体验：原点在房间地面上
-- VR 坐姿体验：原点在用户座位位置
+bounded-floor  → 原点在地面，有安全边界
+               → 边界数据告诉你用户能走多远
+               → Room-scale VR 用这个
 
-### 参考空间类型
+unbounded      → 原点任意，用户可以自由走动
+               → AR 导航、大范围 AR 用这个
+```
 
 ```typescript
-// 1. local - 以设备初始位置为原点，无楼层信息
-// 适用：站立式 VR、简单 AR
-const localSpace = await session.requestReferenceSpace('local');
-
-// 2. local-floor - 以设备初始位置为原点，但原点在地面
-// 适用：大多数 VR 应用，AR 应用
-const localFloorSpace = await session.requestReferenceSpace('local-floor');
-
-// 3. bounded-floor - 房间级追踪，有安全边界
-// 适用：房间级 VR 体验
-const boundedFloorSpace = await session.requestReferenceSpace('bounded-floor');
-
-// 4. viewer - 以设备当前位置为原点（每帧变化）
-// 适用：手部追踪等特殊场景
-const viewerSpace = await session.requestReferenceSpace('viewer');
-```
-
-### 选择参考空间的决策树
-
-```
-需要知道用户的物理高度？
-├── 是 → local-floor 或 bounded-floor
-└── 否 → local
-    │
-    需要房间级追踪和安全边界？
-    ├── 是 → bounded-floor
-    └── 否 → local-floor（最通用的选择）
-```
-
-### 参考空间与坐标系的关系
-
-参考空间本质上定义了一个坐标系的原点和朝向：
-
-- **原点**：根据参考空间类型确定
-- **朝向**：Y 轴向上，Z 轴朝向用户初始前方
-- **单位**：米
-
-```typescript
-// 获取参考空间后，可以用它来转换坐标
-const referenceSpace = await session.requestReferenceSpace('local-floor');
-
-// XRFrame 的 getViewerPose 接收参考空间作为参数
-// 返回的位姿数据就是相对于这个参考空间的
+const refSpace = await session.requestReferenceSpace('local-floor')
 ```
 
 ## 帧循环
 
-帧循环是 WebXR 应用的核心。它类似于 `requestAnimationFrame`，但专门为 XR 设备优化。
-
-### 基本帧循环
+WebXR 的渲染循环和普通 `requestAnimationFrame` 不同——它绑定到 XRSession：
 
 ```typescript
-class XRFrameLoop {
-  private session: XRSession;
-  private referenceSpace: XRReferenceSpace;
-  private gl: WebGLRenderingContext;
-  private baseLayer: XRWebGLLayer;
-
-  constructor(session: XRSession, canvas: HTMLCanvasElement) {
-    this.session = session;
-
-    // 创建 WebGL 上下文，启用 XR 兼容
-    this.gl = canvas.getContext('webgl', { xrCompatible: true })!;
-
-    // 创建 XRWebGLLayer 作为渲染目标
-    this.baseLayer = new XRWebGLLayer(session, this.gl);
-    session.updateRenderState({ baseLayer: this.baseLayer });
-  }
-
-  async start(): Promise<void> {
-    this.referenceSpace = await this.session.requestReferenceSpace('local-floor');
-    this.session.requestAnimationFrame(this.onFrame.bind(this));
-  }
-
-  private onFrame(time: DOMHighResTimeStamp, frame: XRFrame): void {
-    // 请求下一帧（在处理当前帧之前请求，确保连续性）
-    this.session.requestAnimationFrame(this.onFrame.bind(this));
-
-    // 获取当前帧的相机位姿
-    const pose = frame.getViewerPose(this.referenceSpace);
-    if (!pose) {
-      // 位姿不可用（追踪丢失），跳过本帧渲染
-      return;
-    }
-
-    // 清除画布
-    const gl = this.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.baseLayer.framebuffer);
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-    // 遍历每个视图（左眼和右眼）
-    for (const view of pose.views) {
-      const viewport = this.baseLayer.getViewport(view)!;
-      gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-
-      // 获取视图的投影矩阵和变换矩阵
-      const projectionMatrix = view.projectionMatrix;
-      const transform = view.transform;
-
-      // 在这里渲染场景...
-      this.renderScene(projectionMatrix, transform);
-    }
-  }
-
-  private renderScene(projectionMatrix: Float32Array, transform: XRRigidTransform): void {
-    // 实际渲染逻辑将在后续课程中实现
-  }
-}
-```
-
-### 理解 XRFrame 的数据结构
-
-每帧获取的数据形成了一个层次结构：
-
-```
-XRFrame
-  └── XRViewerPose（相对于参考空间的相机位姿）
-        ├── transform（位置 + 旋转）
-        └── views[]（每个眼睛/摄像头的视图）
-              ├── eye（left / right / none）
-              ├── projectionMatrix（投影矩阵 4x4）
-              └── transform（该视图的变换）
-```
-
-对于 AR 会话，`views` 数组通常只有一个元素（单摄像头）；对于 VR 头显，通常有两个元素（左眼和右眼）。
-
-### 处理追踪丢失
-
-XR 设备的追踪可能因为遮挡、光照不足等原因暂时丢失。正确处理追踪丢失是健壮应用的必要条件：
-
-```typescript
-private onFrame(time: DOMHighResTimeStamp, frame: XRFrame): void {
-  this.session.requestAnimationFrame(this.onFrame.bind(this));
-
-  const pose = frame.getViewerPose(this.referenceSpace);
-
+function onXRFrame(time: DOMHighResTimeStamp, frame: XRFrame) {
+  const pose = frame.getViewerPose(refSpace)
   if (!pose) {
-    // 追踪丢失：显示提示信息，但不要停止帧循环
-    this.showTrackingLostOverlay();
-    return;
+    session.requestAnimationFrame(onXRFrame) // 等待追踪恢复
+    return
   }
 
-  // 追踪恢复：隐藏提示信息
-  this.hideTrackingLostOverlay();
+  // 每个 view 对应一只眼睛（VR 有两只，AR 只有一只）
+  for (const view of pose.views) {
+    const viewport = glLayer.getViewport(view)
+    renderer.setViewport(viewport.x, viewport.y, viewport.width, viewport.height)
 
-  // 正常渲染...
+    // 用 view 的投影矩阵和视图矩阵渲染
+    camera.projectionMatrix.fromArray(view.projectionMatrix)
+    camera.matrixWorldInverse.fromArray(view.transform.matrix)
+    camera.matrixWorld.copy(camera.matrixWorldInverse).invert()
+  }
+
+  session.requestAnimationFrame(onXRFrame) // 请求下一帧
 }
 ```
 
-## 实战：最小 WebXR 应用
+## 整合 Three.js
 
-将以上概念整合为一个可运行的最小 WebXR 应用：
+Three.js 提供了 `WebXRManager` 来简化整合：
 
 ```typescript
-class MinimalXRApp {
-  private session: XRSession | null = null;
-  private gl: WebGLRenderingContext | null = null;
-  private baseLayer: XRWebGLLayer | null = null;
-  private referenceSpace: XRReferenceSpace | null = null;
-  private canvas: HTMLCanvasElement;
+import * as THREE from 'three'
 
-  constructor(canvas: HTMLCanvasElement) {
-    this.canvas = canvas;
-  }
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.xr.enabled = true // 关键：启用 XR 模式
 
-  async start(): Promise<void> {
-    // 1. 能力检测
-    if (!navigator.xr) {
-      throw new Error('WebXR 不可用');
-    }
+const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera()
 
-    const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    if (!supported) {
-      throw new Error('沉浸式 AR 不受支持');
-    }
+async function enterXR() {
+  const mode = await checkXRSupport()
+  if (!mode) throw new Error('不支持 XR')
 
-    // 2. 初始化 WebGL
-    this.gl = this.canvas.getContext('webgl', { xrCompatible: true })!;
-    if (!this.gl) {
-      throw new Error('WebGL 不可用');
-    }
+  const session = await startXRSession(mode)
+  renderer.xr.setSession(session) // Three.js 自动处理帧循环
 
-    // 3. 创建会话
-    this.session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['local-floor'],
-    });
-
-    // 4. 配置渲染层
-    this.baseLayer = new XRWebGLLayer(this.session, this.gl);
-    this.session.updateRenderState({ baseLayer: this.baseLayer });
-
-    // 5. 获取参考空间
-    this.referenceSpace = await this.session.requestReferenceSpace('local-floor');
-
-    // 6. 启动帧循环
-    this.session.requestAnimationFrame(this.onFrame.bind(this));
-
-    // 7. 监听结束
-    this.session.addEventListener('end', () => this.onSessionEnd());
-  }
-
-  private onFrame(time: DOMHighResTimeStamp, frame: XRFrame): void {
-    if (!this.session || !this.gl || !this.baseLayer || !this.referenceSpace) return;
-
-    this.session.requestAnimationFrame(this.onFrame.bind(this));
-
-    const pose = frame.getViewerPose(this.referenceSpace);
-    if (!pose) return;
-
-    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.baseLayer.framebuffer);
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-
-    for (const view of pose.views) {
-      const viewport = this.baseLayer.getViewport(view)!;
-      this.gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-      // 实际渲染逻辑
-    }
-  }
-
-  private onSessionEnd(): void {
-    this.session = null;
-    this.baseLayer = null;
-    this.referenceSpace = null;
-  }
-
-  end(): void {
-    this.session?.end();
-  }
+  // 进入 XR 后，renderer.render() 会自动使用 XR 帧循环
+  renderer.setAnimationLoop(() => {
+    renderer.render(scene, camera)
+  })
 }
 ```
 
-## 常见误区
+`renderer.xr.enabled = true` 后，Three.js 会自动处理：
+- 左右眼视图矩阵
+- 投影矩阵
+- 帧循环同步
+- 视口设置
 
-### 误区一：把 `requestAnimationFrame` 和 XR 帧循环混用
+你只需要正常调 `renderer.render()`。
 
-WebXR 有自己的帧循环机制（`session.requestAnimationFrame`），它与浏览器的 `requestAnimationFrame` 是独立的。XR 帧循环的频率与设备刷新率同步，而浏览器的 `requestAnimationFrame` 通常固定在 60Hz。
+## 会话生命周期
 
-```typescript
-// 错误：使用浏览器的 requestAnimationFrame 驱动 XR 渲染
-function wrongLoop() {
-  requestAnimationFrame(wrongLoop);
-  // 在这里获取 XR pose 数据可能导致不同步
-}
-
-// 正确：使用 session 的 requestAnimationFrame
-function correctLoop(time: DOMHighResTimeStamp, frame: XRFrame) {
-  session.requestAnimationFrame(correctLoop);
-  // 在这里获取 XR pose 数据是同步且正确的
-}
+```
+用户点击"进入 XR"
+    │
+    ▼
+requestSession() ──→ 权限请求 ──→ 用户授权
+    │
+    ▼
+session.start ──→ XRSession 'start' 事件
+    │
+    ▼
+帧循环运行中 ──→ requestAnimationFrame 循环
+    │
+    ▼
+用户按"退出" 或 调用 session.end()
+    │
+    ▼
+session.end ──→ 'end' 事件 ──→ 清理资源
 ```
 
-### 误区二：忽略 `requiredFeatures` 与 `optionalFeatures` 的区别
+## 你可能踩的坑
 
-把所有特性都放到 `requiredFeatures` 会导致在不支持某些特性的设备上完全无法启动会话。应该只把应用核心功能必需的特性放入 `requiredFeatures`。
+**坑一：在 Session 结束前不清理资源**
 
-### 误区三：认为参考空间是固定的
+会话结束后，WebGL 上下文可能仍然有效但 XR 相关的资源已失效。必须在 `end` 事件中清理。
 
-参考空间在会话创建时确定，但设备可能会重新校准。不要假设参考空间的原点永远不变，特别是在长时间运行的会话中。
+**坑二：不处理追踪丢失**
 
-### 误区四：在没有 `xrCompatible` 上下文的情况下使用 WebGL
+XR 追踪可能暂时丢失（用户遮挡摄像头、环境太暗）。`frame.getViewerPose()` 会返回 `null`，这时候不要渲染，等下一帧再试。
 
-WebXR 要求 WebGL 上下文在创建时启用 `xrCompatible` 标志。如果先创建普通 WebGL 上下文再尝试用于 WebXR，会报错。
+**坑三：requiredFeatures 写太多**
 
-## 工程建议
-
-1. **特性检测优先**：在 UI 层面先检测 WebXR 支持情况，不支持时优雅降级，而不是让用户点击按钮后才报错
-2. **参考空间选择**：除非有特殊需求，优先使用 `local-floor`，它在大多数设备上都有良好支持
-3. **帧循环中的早期退出**：`getViewerPose` 返回 `null` 时不要恐慌，这是正常情况，只需跳过渲染
-4. **资源管理**：会话结束时及时释放 WebGL 资源，避免内存泄漏
-5. **HTTPS 要求**：WebXR 只在安全上下文中可用，开发时使用 `localhost` 或配置本地 HTTPS
-
-## 小结
-
-本课介绍了 WebXR Device API 的三个核心概念：
-
-- **XRSession**：代表一次 AR/VR 会话，管理生命周期和渲染状态
-- **参考空间**：定义追踪数据的坐标原点，影响所有位姿数据的解读
-- **帧循环**：通过 `session.requestAnimationFrame` 驱动渲染，每帧获取最新的追踪数据
-
-这三个概念是所有 WebXR 应用的基础。后续课程将在此基础上分别深入 AR 和 VR 的具体功能。
+每多写一个 required feature，就多一批设备不支持你的应用。能放 optional 的就放 optional。
 
 ## 练习
 
-### 练习一：参考空间选择
+### 练习一：设备能力检测页面
 
-一个 VR 密室逃脱游戏，玩家需要在 3m x 3m 的房间内走动寻找线索。应该选择哪种参考空间？为什么？
+写一个 HTML 页面，打开后自动检测浏览器的 WebXR 支持情况，列出：是否支持 immersive-vr、immersive-ar、hand-tracking、hit-test。用表格展示结果。
 
-### 练习二：会话特性配置
+### 练习二：最小 XR 会话
 
-设计一个 AR 家具摆放应用的 `XRSessionInit` 配置。该应用的核心功能是在真实地面上放置家具模型，同时希望支持锚点功能（让用户固定家具位置）。
-
-### 练习三：帧循环实现
-
-实现一个帧循环，要求：
-- 每帧输出当前相机位置（x, y, z）
-- 追踪丢失时输出警告日志
-- 追踪恢复时输出恢复日志
+在练习一的基础上，添加一个"进入 VR"按钮。点击后请求 `immersive-vr` 会话，进入后在用户面前 2 米处渲染一个红色立方体。要求处理会话结束事件。
 
 ---
 
@@ -455,68 +200,68 @@ WebXR 要求 WebGL 上下文在创建时启用 `xrCompatible` 标志。如果先
 
 ### 练习一
 
-**思路**：密室逃脱需要房间级走动，必须有地面参考和安全边界。
-
-**答案**：选择 `bounded-floor`。原因：
-- `bounded-floor` 提供房间级追踪，原点在地面上
-- 它包含安全边界信息（`boundsGeometry`），可以用来防止玩家撞墙
-- `local-floor` 虽然有地面信息，但没有安全边界，不适合需要走动的场景
-
-**要点**：
-- `bounded-floor` 适用于房间级 VR 体验
-- 安全边界是房间级体验的关键安全特性
+```html
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>XR 能力检测</title></head>
+<body>
+  <h2>WebXR 能力检测</h2>
+  <table border="1" cellpadding="8">
+    <tr><th>能力</th><th>状态</th></tr>
+    <tr><td>navigator.xr</td><td id="xr">检测中...</td></tr>
+    <tr><td>immersive-vr</td><td id="vr">检测中...</td></tr>
+    <tr><td>immersive-ar</td><td id="ar">检测中...</td></tr>
+  </table>
+  <script>
+    async function check() {
+      document.getElementById('xr').textContent = navigator.xr ? '支持' : '不支持'
+      if (!navigator.xr) return
+      const [vr, ar] = await Promise.all([
+        navigator.xr.isSessionSupported('immersive-vr'),
+        navigator.xr.isSessionSupported('immersive-ar')
+      ])
+      document.getElementById('vr').textContent = vr ? '支持' : '不支持'
+      document.getElementById('ar').textContent = ar ? '支持' : '不支持'
+    }
+    check()
+  </script>
+</body>
+</html>
+```
 
 ### 练习二
 
-**思路**：区分必需特性（核心功能）和可选特性（增强功能）。
-
-**答案**：
 ```typescript
-const sessionConfig: XRSessionInit = {
-  requiredFeatures: ['local-floor'],  // 需要地面参考来正确放置家具
-  optionalFeatures: ['hit-test', 'anchors']  // 命中检测和锚点是增强功能
-};
+import * as THREE from 'three'
+
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.xr.enabled = true
+document.body.appendChild(renderer.domElement)
+
+const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera()
+scene.add(new THREE.AmbientLight(0xffffff, 0.5))
+scene.add(new THREE.DirectionalLight(0xffffff, 1))
+
+const cube = new THREE.Mesh(
+  new THREE.BoxGeometry(0.3, 0.3, 0.3),
+  new THREE.MeshStandardMaterial({ color: 0xff0000 })
+)
+cube.position.set(0, 1.5, -2) // 眼前 2 米，高度 1.5 米
+scene.add(cube)
+
+document.getElementById('enterVR')!.addEventListener('click', async () => {
+  const session = await navigator.xr.requestSession('immersive-vr', {
+    requiredFeatures: ['local-floor']
+  })
+  renderer.xr.setSession(session)
+
+  session.addEventListener('end', () => {
+    console.log('VR 会话已结束')
+  })
+
+  renderer.setAnimationLoop(() => {
+    renderer.render(scene, camera)
+  })
+})
 ```
-
-**要点**：
-- `local-floor` 是必需的，因为家具必须放置在正确地面上
-- `hit-test` 和 `anchors` 是可选的，没有它们应用仍可运行（比如用其他方式放置家具）
-- 不要把 `hit-test` 放到 `requiredFeatures`，因为不是所有设备都支持
-
-### 练习三
-
-**思路**：基于 `requestAnimationFrame` 的递归调用，处理好 `pose` 为 `null` 的情况。
-
-**答案**：
-```typescript
-let wasTracking = true;
-
-function onFrame(time: DOMHighResTimeStamp, frame: XRFrame): void {
-  session.requestAnimationFrame(onFrame);
-
-  const pose = frame.getViewerPose(referenceSpace);
-
-  if (!pose) {
-    if (wasTracking) {
-      console.warn('追踪丢失');
-      wasTracking = false;
-    }
-    return;
-  }
-
-  if (!wasTracking) {
-    console.log('追踪已恢复');
-    wasTracking = true;
-  }
-
-  const position = pose.transform.position;
-  console.log(`相机位置: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
-
-  // 渲染逻辑...
-}
-```
-
-**要点**：
-- 使用 `wasTracking` 状态变量追踪状态变化，避免每帧都输出日志
-- 追踪丢失时不应停止帧循环，应继续请求下一帧
-- `pose` 为 `null` 是正常现象，不需要错误处理

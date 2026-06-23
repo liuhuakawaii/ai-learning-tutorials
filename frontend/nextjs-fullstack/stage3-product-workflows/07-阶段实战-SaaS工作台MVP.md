@@ -1,581 +1,216 @@
-# 第七课：阶段实战 — SaaS 工作台 MVP
+# 阶段实战：SaaS 工作台 MVP
 
-## 场景引入
+## 项目目标
 
-你已经完成了三个阶段的学习——App Router 基础、数据认证与数据库、产品工作流——现在需要把所有知识整合成一个可交付的 SaaS 产品 MVP。这个产品需要：Dashboard 展示关键指标、项目列表支持搜索筛选排序分页、团队成员邀请和角色管理、套餐和用量限制、管理后台和审计日志。这不是一个 demo，而是一个用户可以直接注册、创建团队、邀请同事、开始协作的真实产品。你需要在架构设计、功能实现、用户体验和代码质量之间找到平衡，交付一个既完整又可维护的 MVP。
+构建 SaaS 工作台 MVP：Dashboard + 搜索/筛选/分页 + 通知系统 + 套餐设计 + 管理后台 + 审计日志。这是一个接近真实产品的完整后台。
 
-## 学习目标
+## 功能模块
 
-综合运用第三阶段所学知识，构建一个 SaaS 工作台 MVP，包含：
+1. **Dashboard**——关键指标 + 趋势图 + 待办
+2. **搜索筛选排序分页**——列表页标准能力
+3. **通知系统**——站内通知 + 邮件
+4. **套餐管理**——Free/Pro/Enterprise
+5. **管理后台**——用户管理、数据统计
+6. **审计日志**——记录所有关键操作
 
-1. Dashboard 信息架构
-2. 搜索、筛选、排序、分页
-3. 邀请成员与通知
-4. 套餐与用量管理
-5. 管理后台与审计日志
-
----
-
-## 一、项目结构
-
-```
-app/
-├── layout.tsx
-├── page.tsx                     ← 首页
-│
-├── (auth)/
-│   ├── login/page.tsx
-│   └── register/page.tsx
-│
-├── (dashboard)/
-│   ├── layout.tsx               ← 主布局
-│   ├── page.tsx                 ← Dashboard
-│   │
-│   ├── projects/
-│   │   ├── page.tsx             ← 项目列表（带搜索、筛选、分页）
-│   │   ├── new/page.tsx
-│   │   └── [id]/page.tsx
-│   │
-│   ├── teams/
-│   │   ├── page.tsx
-│   │   └── [teamId]/
-│   │       ├── page.tsx
-│   │       ├── members/page.tsx ← 成员管理（邀请、角色）
-│   │       └── settings/
-│   │           ├── page.tsx
-│   │           ├── billing/page.tsx   ← 套餐管理
-│   │           ├── usage/page.tsx     ← 用量统计
-│   │           └── audit/page.tsx     ← 审计日志
-│   │
-│   └── profile/page.tsx
-│
-├── admin/
-│   ├── layout.tsx
-│   ├── page.tsx                 ← 管理概览
-│   ├── users/page.tsx           ← 用户管理
-│   ├── teams/page.tsx           ← 团队管理
-│   └── audit/page.tsx           ← 系统审计
-│
-└── api/
-    └── ...
-```
-
----
-
-## 二、数据模型
-
-```prisma
-// prisma/schema.prisma
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  avatar    String?
-  password  String
-  role      UserRole @default(USER)
-  banned    Boolean  @default(false)
-  bannedAt  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  ownedTeams   Team[]        @relation("TeamOwner")
-  memberships  Membership[]
-  createdProjects Project[]  @relation("ProjectCreator")
-  auditLogs    AuditLog[]
-}
-
-model Team {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  owner    User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  ownerId  String
-  members  Membership[]
-  projects Project[]
-  invitations Invitation[]
-  auditLogs AuditLog[]
-
-  subscription Subscription?
-  usageRecords UsageRecord[]
-}
-
-model Membership {
-  id        String   @id @default(cuid())
-  role      Role     @default(MEMBER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId String
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId String
-
-  @@unique([userId, teamId])
-}
-
-model Project {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  status      ProjectStatus @default(ACTIVE)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId    String
-  creator   User   @relation("ProjectCreator", fields: [creatorId], references: [id])
-  creatorId String
-}
-
-model Invitation {
-  id        String   @id @default(cuid())
-  email     String
-  token     String   @unique
-  role      Role     @default(MEMBER)
-  status    InvitationStatus @default(PENDING)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId    String
-  inviter   User   @relation(fields: [inviterId], references: [id])
-  inviterId String
-
-  @@unique([email, teamId])
-}
-
-model Subscription {
-  id        String   @id @default(cuid())
-  status    SubscriptionStatus @default(ACTIVE)
-  startDate DateTime @default(now())
-  endDate   DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  plan   Plan   @relation(fields: [planId], references: [id])
-  planId String
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId String @unique
-}
-
-model Plan {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  price       Int
-  limits      Json
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-
-  subscriptions Subscription[]
-}
-
-model UsageRecord {
-  id        String   @id @default(cuid())
-  action    String
-  quantity  Int      @default(1)
-  createdAt DateTime @default(now())
-
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  teamId String
-
-  @@index([teamId, action, createdAt])
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  action    String
-  resource  String
-  resourceId String?
-  details   Json?
-  ipAddress String?
-  createdAt DateTime @default(now())
-
-  user   User   @relation(fields: [userId], references: [id])
-  userId String
-  team   Team?  @relation(fields: [teamId], references: [id])
-  teamId String?
-
-  @@index([userId])
-  @@index([teamId])
-  @@index([action])
-  @@index([createdAt])
-}
-
-model SystemSetting {
-  id    String @id @default(cuid())
-  key   String @unique
-  value String
-}
-
-enum UserRole {
-  USER
-  ADMIN
-  SUPER_ADMIN
-}
-
-enum Role {
-  OWNER
-  ADMIN
-  MEMBER
-}
-
-enum ProjectStatus {
-  ACTIVE
-  ARCHIVED
-  DELETED
-}
-
-enum InvitationStatus {
-  PENDING
-  ACCEPTED
-  EXPIRED
-  REVOKED
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  CANCELED
-  PAST_DUE
-}
-```
-
----
-
-## 三、核心功能实现
-
-### 3.1 Dashboard 统计
+## Dashboard 实现
 
 ```tsx
-// app/(dashboard)/page.tsx
-import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
-import { StatCard } from '@/components/StatCard'
-import { getTeamPlan, getTeamUsage } from '@/lib/subscription'
-
-export default async function DashboardPage() {
-  const user = await requireAuth()
-
-  const teams = await prisma.team.findMany({
-    where: { members: { some: { userId: user.id } } },
-    include: {
-      _count: { select: { projects: true, members: true } }
-    }
-  })
-
-  // 获取主要团队的用量
-  const primaryTeam = teams[0]
-  let usage = null
-  let plan = null
-
-  if (primaryTeam) {
-    [usage, plan] = await Promise.all([
-      getTeamUsage(primaryTeam.id),
-      getTeamPlan(primaryTeam.id)
-    ])
-  }
-
-  return (
-    <div>
-      <h2 className="text-2xl font-bold mb-6">欢迎回来，{user.name}</h2>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          title="我的团队"
-          value={teams.length}
-          icon="👥"
-        />
-        <StatCard
-          title="参与项目"
-          value={teams.reduce((sum, t) => sum + t._count.projects, 0)}
-          icon="📁"
-        />
-        <StatCard
-          title="本月 API 调用"
-          value={usage?.apiCalls || 0}
-          icon="🔌"
-        />
-        <StatCard
-          title="当前套餐"
-          value={plan?.name || '免费版'}
-          icon="💎"
-        />
-      </div>
-
-      {/* 最近团队 */}
-      <div className="bg-white p-6 rounded-lg border">
-        <h3 className="font-bold mb-4">我的团队</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {teams.map(team => (
-            <a
-              key={team.id}
-              href={`/teams/${team.id}`}
-              className="p-4 border rounded hover:shadow-md transition-shadow"
-            >
-              <h4 className="font-medium">{team.name}</h4>
-              <p className="text-sm text-gray-500">
-                {team._count.members} 成员 · {team._count.projects} 项目
-              </p>
-            </a>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-```
-
-### 3.2 项目列表（带搜索筛选分页）
-
-```tsx
-// app/(dashboard)/projects/page.tsx
-import { prisma } from '@/lib/prisma'
-import { requireAuth } from '@/lib/auth'
-import { SearchBar } from '@/components/SearchBar'
-import { FilterBar } from '@/components/FilterBar'
-import { SortSelect } from '@/components/SortSelect'
-import { Pagination } from '@/components/Pagination'
-import { EmptyState } from '@/components/EmptyState'
-import { canCreateProject } from '@/lib/limits'
-import { UpgradePrompt } from '@/components/UpgradePrompt'
-
-export default async function ProjectsPage({
-  searchParams
-}: {
-  searchParams: Promise<{
-    q?: string
-    status?: string
-    teamId?: string
-    sort?: string
-    page?: string
-  }>
-}) {
-  const user = await requireAuth()
-  const { q, status, teamId, sort, page: pageStr } = await searchParams
-  const page = Math.max(1, parseInt(pageStr || '1'))
-  const pageSize = 10
-
-  // 获取用户的团队
-  const teams = await prisma.team.findMany({
-    where: { members: { some: { userId: user.id } } },
-    select: { id: true, name: true }
-  })
-
-  const teamIds = teams.map(t => t.id)
-
-  // 构建查询条件
-  const where = {
-    teamId: { in: teamIds },
-    ...(teamId ? { teamId } : {}),
-    ...(status ? { status } : {}),
-    ...(q ? {
-      OR: [
-        { name: { contains: q, mode: 'insensitive' as const } },
-        { description: { contains: q, mode: 'insensitive' as const } },
-      ]
-    } : {})
-  }
-
-  // 排序
-  const orderBy = sort === 'name'
-    ? { name: 'asc' as const }
-    : { createdAt: 'desc' as const }
-
-  const [projects, total] = await Promise.all([
-    prisma.project.findMany({
-      where,
-      orderBy,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: {
-        team: { select: { name: true } }
-      }
-    }),
-    prisma.project.count({ where })
+// app/(admin)/page.tsx
+export default async function Dashboard() {
+  const [stats, activities, notifications] = await Promise.all([
+    getDashboardStats(),
+    getRecentActivities(10),
+    getUnreadNotifications(),
   ])
 
-  const totalPages = Math.ceil(total / pageSize)
-
-  // 检查是否可以创建项目
-  const primaryTeam = teams[0]
-  const limitCheck = primaryTeam ? await canCreateProject(primaryTeam.id) : null
-
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">项目列表</h2>
-        {limitCheck?.allowed !== false ? (
-          <a
-            href="/projects/new"
-            className="px-4 py-2 bg-blue-500 text-white rounded"
-          >
-            创建项目
-          </a>
-        ) : (
-          <UpgradePrompt
-            teamId={primaryTeam!.id}
-            feature="项目数量"
-            current={limitCheck!.current}
-            limit={limitCheck!.limit}
-          />
-        )}
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">工作台</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard title="总用户" value={stats.totalUsers} change={stats.userGrowth} icon="users" />
+        <MetricCard title="活跃项目" value={stats.activeProjects} icon="folder" />
+        <MetricCard title="本月收入" value={`¥${stats.monthlyRevenue.toLocaleString()}`} change={stats.revenueGrowth} icon="currency" />
+        <MetricCard title="转化率" value={`${stats.conversionRate}%`} icon="chart" />
       </div>
-
-      {/* 工具栏 */}
-      <div className="flex flex-wrap gap-4 mb-6">
-        <div className="flex-1 min-w-[200px]">
-          <SearchBar placeholder="搜索项目..." />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white rounded-lg border p-6">
+          <h2 className="font-semibold mb-4">趋势</h2>
+          <TrendChart data={stats.trend} />
         </div>
-        <FilterBar
-          filters={[
-            {
-              name: 'status',
-              label: '状态',
-              options: [
-                { label: '进行中', value: 'ACTIVE' },
-                { label: '已归档', value: 'ARCHIVED' },
-              ]
-            },
-            {
-              name: 'teamId',
-              label: '团队',
-              options: teams.map(t => ({
-                label: t.name,
-                value: t.id
-              }))
-            }
-          ]}
-        />
-        <SortSelect
-          options={[
-            { label: '最新创建', value: 'newest' },
-            { label: '按名称', value: 'name' },
-          ]}
-        />
+        <div className="bg-white rounded-lg border p-6">
+          <h2 className="font-semibold mb-4">最近活动</h2>
+          <ActivityList items={activities} />
+        </div>
       </div>
-
-      {/* 结果统计 */}
-      <p className="text-sm text-gray-500 mb-4">共 {total} 个项目</p>
-
-      {/* 项目列表 */}
-      {projects.length === 0 ? (
-        <EmptyState
-          icon="📁"
-          title="没有找到项目"
-          description={q ? '试试其他搜索词' : '创建你的第一个项目'}
-          action={
-            <a href="/projects/new" className="px-4 py-2 bg-blue-500 text-white rounded">
-              创建项目
-            </a>
-          }
-        />
-      ) : (
-        <div className="space-y-4">
-          {projects.map(project => (
-            <a
-              key={project.id}
-              href={`/projects/${project.id}`}
-              className="block p-4 bg-white border rounded hover:shadow-md transition-shadow"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="font-medium">{project.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {project.description || '暂无描述'}
-                  </p>
-                </div>
-                <span className="text-sm text-gray-400">
-                  {project.team.name}
-                </span>
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
-                创建于 {new Date(project.createdAt).toLocaleDateString('zh-CN')}
-              </p>
-            </a>
-          ))}
-        </div>
-      )}
-
-      <Pagination totalPages={totalPages} currentPage={page} />
     </div>
   )
 }
 ```
 
-## 常见误区
+## 搜索/筛选/排序/分页
 
-1. **"先把所有功能做完再优化"**：MVP 的核心是"最小可行"，不是"完美"。先确保核心流程（注册→创建团队→邀请成员→创建项目）能跑通，再逐步添加搜索、套餐、审计等高级功能。
-2. **"所有数据都在一个查询中获取"**：Dashboard 需要统计卡片、最近团队、用量信息等多个数据源。用 `Promise.all` 并行查询，不要在一个巨大的 `include` 中获取所有关联数据。
-3. **"管理后台可以直接复用用户端的组件"**：管理后台的数据结构和交互模式与用户端不同（如用户列表需要显示角色、注册时间、操作按钮），应该有独立的表格和操作组件。
-4. **"不需要处理错误状态"**：每个页面都要处理加载、错误、空数据三种状态。一个没有错误处理的页面在数据库查询失败时会直接白屏。
+用 URL 参数管理所有状态，支持分享链接和浏览器前进后退：
 
-## 工程建议
+```tsx
+// app/(admin)/projects/page.tsx
+export default async function ProjectsPage({ searchParams }) {
+  const params = await searchParams
+  const page = parseInt(params.page) || 1
+  const sort = params.sort || 'createdAt'
+  const order = params.order || 'desc'
+  const q = params.q || ''
+  const status = params.status || ''
+  const pageSize = 10
 
-1. **从 Prisma schema 开始**：先定义完整的数据模型（User、Team、Membership、Project、Invitation、Subscription、Plan、UsageRecord、AuditLog），确保所有关系和约束正确，再写业务逻辑。
-2. **核心流程优先于高级功能**：先实现注册→登录→创建团队→邀请成员→创建项目这条主流程，确保用户能完成核心操作，再逐步添加搜索、套餐、审计等功能。
-3. **每个页面都处理四种状态**：加载中（骨架屏）、加载成功（正常内容）、加载失败（错误提示+重试按钮）、无数据（空状态引导）。用 `loading.tsx`、`error.tsx` 和条件渲染覆盖所有场景。
-4. **验收清单是最终的质量门禁**：按照课程提供的验收清单逐项检查，确保每个功能模块（Dashboard、搜索筛选、邀请通知、套餐用量、管理后台、审计日志）都经过完整测试。
+  const { items, total } = await getProjects({ page, sort, order, q, status, pageSize })
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">项目管理</h1>
+        <Link href="/admin/projects/new" className="btn-primary">创建项目</Link>
+      </div>
+      <div className="flex gap-4">
+        <SearchInput placeholder="搜索项目..." />
+        <FilterSelect name="status" options={['全部','进行中','已完成']} />
+      </div>
+      <DataTable
+        columns={[
+          { key: 'name', label: '名称', sortable: true },
+          { key: 'status', label: '状态', sortable: true },
+          { key: 'createdAt', label: '创建时间', sortable: true },
+          { key: 'actions', label: '操作' },
+        ]}
+        data={items}
+        currentSort={sort}
+        currentOrder={order}
+      />
+      <Pagination total={total} page={page} pageSize={pageSize} />
+    </div>
+  )
+}
+```
+
+## 通知系统
+
+```typescript
+// lib/notifications.ts
+export async function createNotification(userId: string, data: {
+  type: 'info' | 'warning' | 'success'
+  title: string
+  message: string
+  link?: string
+}) {
+  await prisma.notification.create({
+    data: { userId, ...data, read: false },
+  })
+  // 可选：发送邮件
+  if (data.type === 'warning') {
+    await sendEmail(userId, data.title, data.message)
+  }
+}
+
+export async function getUnreadNotifications(userId: string) {
+  return prisma.notification.findMany({
+    where: { userId, read: false },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
+}
+```
+
+## 套餐管理
+
+```typescript
+// lib/plans.ts
+export const PLANS = {
+  free: { name: 'Free', price: 0, limits: { projects: 3, members: 5, storage: 100 } },
+  pro: { name: 'Pro', price: 99, limits: { projects: 50, members: 20, storage: 10000 } },
+  enterprise: { name: 'Enterprise', price: 499, limits: { projects: -1, members: -1, storage: -1 } },
+}
+
+export async function checkLimit(userId: string, resource: string) {
+  const plan = await getUserPlan(userId)
+  const limit = PLANS[plan].limits[resource]
+  if (limit === -1) return true // unlimited
+  const current = await getResourceCount(userId, resource)
+  return current < limit
+}
+```
+
+## 审计日志
+
+```typescript
+// lib/audit.ts
+export async function logAction(userId: string, action: string, details: Record<string, any>) {
+  await prisma.auditLog.create({
+    data: {
+      userId,
+      action,
+      details: JSON.stringify(details),
+      ip: headers().get('x-forwarded-for') || 'unknown',
+    },
+  })
+}
+
+// 在 Server Action 中使用
+export async function deleteProject(projectId: string) {
+  const user = await requireAuth()
+  await prisma.project.delete({ where: { id: projectId } })
+  await logAction(user.id, 'project.delete', { projectId })
+  revalidatePath('/admin/projects')
+}
+```
+
+## 练习
+
+### 练习一：完整工作台
+
+实现 Dashboard + 项目列表（搜索/筛选/分页）+ 通知中心。
+
+### 练习二：套餐限制
+
+实现创建项目时检查套餐限制，超出时提示升级。
+
+### 练习三：审计日志页面
+
+实现审计日志列表，支持按操作类型、时间范围筛选。
 
 ---
 
-## 四、验收清单
+## 参考答案
 
-完成项目后，检查以下内容：
+### 练习一
 
-### Dashboard
-- [ ] 显示团队数、项目数、成员数统计
-- [ ] 显示最近活动
-- [ ] 空状态引导用户创建团队
+按本课结构依次实现：Dashboard 指标卡片、项目列表页、通知组件。
 
-### 搜索筛选排序分页
-- [ ] 项目列表支持搜索
-- [ ] 支持按状态筛选
-- [ ] 支持按团队筛选
-- [ ] 支持排序
-- [ ] 分页正常工作
+### 练习二
 
-### 邀请与通知
-- [ ] 可以邀请成员
-- [ ] 邀请链接可访问
-- [ ] 可以接受邀请
-- [ ] 邮件发送正常
+```typescript
+export async function createProject(formData: FormData) {
+  const user = await requireAuth()
+  const canCreate = await checkLimit(user.id, 'projects')
+  if (!canCreate) return { error: '已达项目数量上限，请升级套餐' }
+  // ...创建项目
+}
+```
 
-### 套餐与用量
-- [ ] 显示当前套餐
-- [ ] 显示用量统计
-- [ ] 超额时显示升级提示
-- [ ] 可以升级套餐
+### 练习三
 
-### 管理后台
-- [ ] 管理员可以访问
-- [ ] 用户列表带搜索
-- [ ] 可以修改用户角色
-- [ ] 操作有审计日志
-
-### 审计日志
-- [ ] 关键操作有记录
-- [ ] 可以查看日志列表
-- [ ] 支持筛选
-
----
-
-## 五、扩展挑战
-
-1. **实时通知**：使用 WebSocket 实现实时通知
-2. **数据导出**：支持导出项目和成员数据
-3. **API 文档**：生成 API 文档
-4. **多语言**：支持中英文切换
-5. **深色模式**：支持主题切换
+```typescript
+export default async function AuditLogPage({ searchParams }) {
+  const { action, from, to } = await searchParams
+  const logs = await prisma.auditLog.findMany({
+    where: {
+      ...(action && { action }),
+      ...(from && { createdAt: { gte: new Date(from) } }),
+      ...(to && { createdAt: { lte: new Date(to) } }),
+    },
+    include: { user: { select: { name: true, email: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+  })
+  // ...渲染日志列表
+}
+```

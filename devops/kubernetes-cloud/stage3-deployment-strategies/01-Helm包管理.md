@@ -1,390 +1,195 @@
 # Helm 包管理
 
-## 场景引入
+> 前置知识：Deployment、Service、ConfigMap 等 K8s 核心资源（Stage 2）
 
-你已经能把应用部署到 K8s 了，但每次部署需要 `kubectl apply` 六七个 YAML 文件。如果要部署到多个环境（开发、测试、生产），每个环境的配置略有不同，你需要维护多套 YAML 文件。改一个数据库地址，要在三个文件里同步修改——这很容易出错。
+## 多环境的 YAML 地狱
 
-Helm 是 K8s 的包管理器，类似于 Linux 的 apt/yum 或 Node.js 的 npm。它把一组 K8s 资源打包成一个 Chart，通过模板和 Values 文件实现多环境配置复用。
+你已经能把应用部署到 K8s 了，但每次部署需要 `kubectl apply` 六七个 YAML 文件。要部署到开发、测试、生产三个环境，每个环境的数据库地址、密码、副本数都不同。
 
-## 学习目标
+你开始复制 YAML 文件：`dev/`、`staging/`、`prod/` 三个目录。改一个配置要在三个目录里同步修改。改漏了？生产环境用了测试的数据库地址。
 
-1. 理解 Helm 的核心概念：Chart、Release、Repository
-2. 掌握 Helm Chart 的目录结构
-3. 学会使用 Go 模板语法编写 Helm 模板
-4. 掌握 values.yaml 的设计和覆盖机制
-5. 学会使用 Helm 安装、升级、回滚应用
+Helm 是 K8s 的包管理器，类似于 Linux 的 apt 或 Node.js 的 npm。它用模板和变量解决多环境配置复用的问题。
 
 ## Helm 核心概念
 
-- **Chart**：K8s 资源的打包模板，类似于 Docker 镜像
-- **Release**：Chart 的一次部署实例，类似于运行中的容器
-- **Repository**：Chart 的存储仓库，类似于 Docker Hub
-
-```bash
-# Chart 是模板，Release 是实例
-helm install my-release bitnami/nginx    # 从 Chart 创建 Release
-helm upgrade my-release bitnami/nginx    # 升级 Release
-helm rollback my-release 1               # 回滚到版本 1
+```
+Chart：K8s 资源的打包模板，类似于 Docker 镜像
+Release：Chart 的一次部署实例，类似于运行中的容器
+Repository：Chart 的存储仓库，类似于 Docker Hub
 ```
 
-## 安装 Helm
-
 ```bash
-# macOS
-brew install helm
-
-# Linux
-curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
-
-# Windows
-choco install kubernetes-helm
-```
-
-## 使用公共 Chart
-
-```bash
-# 添加仓库
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo update
-
-# 搜索 Chart
-helm search repo nginx
-helm search hub nginx
-
-# 查看 Chart 信息
-helm show chart bitnami/nginx
-helm show values bitnami/nginx
-
-# 安装
-helm install my-nginx bitnami/nginx \
-  --namespace demo \
-  --create-namespace \
-  --set replicaCount=3 \
-  --set service.type=ClusterIP
-
-# 查看 Release
-helm list -n demo
+# 安装一个 Chart（创建一个 Release）
+helm install my-release bitnami/nginx
 
 # 升级
-helm upgrade my-nginx bitnami/nginx \
-  --set replicaCount=5
+helm upgrade my-release bitnami/nginx --set replicaCount=3
 
 # 回滚
-helm history my-nginx -n demo
-helm rollback my-nginx 1 -n demo
+helm rollback my-release 1
 
 # 卸载
-helm uninstall my-nginx -n demo
+helm uninstall my-release
 ```
 
-## 创建自定义 Chart
-
-### Chart 目录结构
-
-```bash
-helm create my-app
-```
+## Chart 目录结构
 
 ```
-my-app/
-├── Chart.yaml          # Chart 元信息（名称、版本、描述）
+my-chart/
+├── Chart.yaml          # Chart 元信息（名称、版本）
 ├── values.yaml         # 默认配置值
-├── charts/             # 依赖的子 Chart
 ├── templates/          # K8s 资源模板
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   ├── ingress.yaml
-│   ├── hpa.yaml
-│   ├── serviceaccount.yaml
-│   ├── _helpers.tpl    # 模板辅助函数
-│   ├── NOTES.txt       # 安装后显示的提示信息
-│   └── tests/
-│       └── test-connection.yaml
-└── .helmignore         # 打包时忽略的文件
-```
-
-### Chart.yaml
-
-```yaml
-apiVersion: v2
-name: my-app
-description: A Helm chart for my web application
-type: application
-version: 0.1.0       # Chart 版本
-appVersion: "1.0.0"   # 应用版本
-dependencies:
-  - name: postgresql
-    version: "12.x.x"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: postgresql.enabled
-```
-
-### values.yaml
-
-```yaml
-replicaCount: 2
-
-image:
-  repository: my-app
-  pullPolicy: IfNotPresent
-  tag: "1.0.0"
-
-service:
-  type: ClusterIP
-  port: 80
-
-ingress:
-  enabled: false
-  className: nginx
-  hosts:
-    - host: app.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-
-resources:
-  requests:
-    cpu: 100m
-    memory: 128Mi
-  limits:
-    cpu: 500m
-    memory: 256Mi
-
-autoscaling:
-  enabled: false
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-
-env:
-  LOG_LEVEL: info
-  DB_HOST: ""
-
-secrets:
-  DB_PASSWORD: ""
+│   ├── configmap.yaml
+│   ├── secret.yaml
+│   └── _helpers.tpl    # 模板辅助函数
+├── charts/             # 依赖的子 Chart
+└── tests/              # 测试
 ```
 
 ## 模板语法
 
-Helm 使用 Go template 语法，结合 Sprig 函数库。
-
-### 基本语法
+Helm 使用 Go 模板语法。用 `{{ .Values.xxx }}` 引用 values.yaml 中的值：
 
 ```yaml
-# 引用值
-{{ .Values.replicaCount }}
-
-# 引用内置对象
-{{ .Release.Name }}
-{{ .Release.Namespace }}
-{{ .Chart.Name }}
-
-# 条件判断
-{{- if .Values.ingress.enabled }}
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-...
-{{- end }}
-
-# 循环
-{{- range .Values.ingress.hosts }}
-- host: {{ .host }}
-{{- end }}
-
-# 定义变量
-{{- $fullName := include "my-app.fullname" . }}
+# values.yaml
+replicaCount: 2
+image:
+  repository: nginx
+  tag: "1.25"
+service:
+  port: 80
 ```
-
-### Deployment 模板
 
 ```yaml
 # templates/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "my-app.fullname" . }}
-  labels:
-    {{- include "my-app.labels" . | nindent 4 }}
+  name: {{ .Release.Name }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      {{- include "my-app.selectorLabels" . | nindent 6 }}
+      app: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        {{- include "my-app.selectorLabels" . | nindent 8 }}
+        app: {{ .Release.Name }}
     spec:
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           ports:
-            - containerPort: 80
-          env:
-            {{- range $key, $value := .Values.env }}
-            - name: {{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-            {{- range $key, $value := .Values.secrets }}
-            - name: {{ $key }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "my-app.fullname" $ }}-secrets
-                  key: {{ $key }}
-            {{- end }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            - containerPort: {{ .Values.service.port }}
 ```
 
-### _helpers.tpl
+## 多环境配置
+
+```
+my-chart/
+├── values.yaml              # 默认值（开发环境）
+├── values-staging.yaml      # staging 覆盖
+└── values-production.yaml   # production 覆盖
+```
 
 ```yaml
-# templates/_helpers.tpl
-{{- define "my-app.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
-{{- end }}
-
-{{- define "my-app.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- $name := default .Chart.Name .Values.nameOverride }}
-{{- if contains $name .Release.Name }}
-{{- .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{- define "my-app.labels" -}}
-helm.sh/chart: {{ include "my-app.chart" . }}
-app.kubernetes.io/name: {{ include "my-app.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
-
-{{- define "my-app.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "my-app.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-```
-
-## Values 覆盖
-
-```bash
-# 命令行覆盖
-helm install my-app ./my-app --set replicaCount=3
-
-# 文件覆盖（多环境）
-helm install my-app ./my-app -f values-prod.yaml
-
-# 多文件覆盖（后面的优先级更高）
-helm install my-app ./my-app -f values-base.yaml -f values-prod.yaml
-```
-
-### 多环境 values 文件
-
-```yaml
-# values-dev.yaml
+# values.yaml（默认）
 replicaCount: 1
-env:
-  LOG_LEVEL: debug
-  DB_HOST: postgres-dev
+image:
+  tag: "latest"
 resources:
-  requests:
-    cpu: 50m
-    memory: 64Mi
+  limits:
+    memory: "128Mi"
 
-# values-prod.yaml
+# values-production.yaml（生产覆盖）
 replicaCount: 3
-env:
-  LOG_LEVEL: info
-  DB_HOST: postgres-prod
+image:
+  tag: "v1.2.3"
 resources:
-  requests:
-    cpu: 250m
-    memory: 256Mi
-autoscaling:
-  enabled: true
+  limits:
+    memory: "512Mi"
 ```
 
-## 常用 Helm 命令
+部署时指定 values 文件：
 
 ```bash
+# 开发环境（用默认值）
+helm install my-app ./my-chart
+
+# staging
+helm install my-app ./my-chart -f values-staging.yaml
+
+# 生产
+helm install my-app ./my-chart -f values-production.yaml
+```
+
+## 常用 Helm 操作
+
+```bash
+# 创建 Chart
+helm create my-chart
+
+# 模板渲染（不实际部署，只看生成的 YAML）
+helm template my-app ./my-chart -f values-production.yaml
+
 # 安装
-helm install <release-name> <chart> [-f values.yaml] [-n namespace]
+helm install my-app ./my-chart -n myapp --create-namespace
 
-# 查看已安装
-helm list [-A]    # -A 所有命名空间
+# 升级（修改配置后）
+helm upgrade my-app ./my-chart -f values-production.yaml -n myapp
 
-# 查看 Release 历史
-helm history <release-name>
-
-# 升级
-helm upgrade <release-name> <chart> [-f values.yaml]
+# 查看历史
+helm history my-app -n myapp
 
 # 回滚
-helm rollback <release-name> <revision>
+helm rollback my-app 1 -n myapp
 
 # 卸载
-helm uninstall <release-name>
-
-# 模板渲染（不实际安装）
-helm template <release-name> <chart> [-f values.yaml]
-
-# lint 检查
-helm lint <chart-path>
+helm uninstall my-app -n myapp
 ```
 
-## 常见误区
+## 常见坑
 
-**误区一："Helm 就是 K8s 的 apt"**
+### 坑一：values.yaml 的默认值
 
-Helm 不只是安装包。它支持模板、多环境配置、版本管理、回滚、依赖管理，是一个完整的应用生命周期管理工具。
+如果 values.yaml 中定义了 `replicaCount: 1`，但你忘记在 values-production.yaml 中覆盖，生产环境就只有 1 个副本。**部署前用 `helm template` 检查生成的 YAML。**
 
-**误区二："values.yaml 里的值可以直接用字符串"**
+### 坑二：Chart 版本 vs 应用版本
 
-敏感信息（密码、密钥）不应该写在 values.yaml 中，应该通过 `--set` 或外部 Secret 注入。
+```yaml
+# Chart.yaml
+version: 0.1.0        # Chart 版本
+appVersion: "1.2.3"   # 应用版本
+```
 
-**误区三："Helm install 失败了就 uninstall 再 install"**
+Chart 版本和应用版本是独立的。改了模板要递增 Chart 版本，改了应用镜像要递增 appVersion。
 
-应该先排查失败原因。频繁 uninstall/install 可能导致数据丢失（特别是有 PV 的应用）。
+### 坑三：命名空间
 
-## 工程建议
+```bash
+# 不指定 namespace 会部署到 default
+helm install my-app ./my-chart
 
-1. **Chart 版本遵循语义化版本**：`major.minor.patch`
-2. **values.yaml 只放非敏感默认值**：密码通过 `--set` 或 Secret 注入
-3. **使用 `helm template` 预览渲染结果**：安装前先检查生成的 YAML
-4. **为每个环境维护独立的 values 文件**：`values-dev.yaml`、`values-staging.yaml`、`values-prod.yaml`
-5. **Chart 依赖用 `dependencies` 管理**：而不是手动复制子 Chart
-
-## 小结
-
-- Helm 把 K8s 资源打包成 Chart，通过模板和 Values 实现多环境复用
-- Chart 是模板，Release 是实例，Repository 是仓库
-- Go 模板语法支持条件、循环、变量、函数
-- 多环境通过不同的 values 文件覆盖默认值
-- Helm 支持安装、升级、回滚、卸载的完整生命周期
+# 始终指定 namespace
+helm install my-app ./my-chart -n myapp --create-namespace
+```
 
 ## 练习
 
 ### 练习一：创建 Chart
 
-为一个简单的 Web 应用创建 Helm Chart：
-1. 使用 `helm create` 创建 Chart 骨架
-2. 修改 templates 使其包含 Deployment 和 Service
-3. 使用 `helm template` 预览渲染结果
-4. 安装到本地集群并验证
+用 `helm create` 创建一个 Chart，修改 templates 中的 deployment.yaml 和 service.yaml，让它部署一个 Node.js 应用。用 `helm template` 验证生成的 YAML。
 
-### 练习二：多环境配置
+### 练习二：多环境部署
 
-为同一个 Chart 创建两套 values 文件：
-1. `values-dev.yaml`：1 副本、debug 日志、小资源
-2. `values-prod.yaml`：3 副本、info 日志、大资源、HPA 启用
-3. 分别安装到 dev 和 prod 命名空间
+创建 values-staging.yaml 和 values-production.yaml，分别设置不同的副本数和资源限制。部署两个 release 到不同 namespace。
+
+### 练习三：Helm 回滚
+
+部署 v1 版本，升级到 v2，再回滚到 v1。用 `helm history` 查看版本历史。
 
 ---
 
@@ -392,86 +197,33 @@ Helm 不只是安装包。它支持模板、多环境配置、版本管理、回
 
 ### 练习一
 
-**答案**：
-
 ```bash
-# 1. 创建 Chart
-helm create web-app
-cd web-app
-
-# 2. 修改 values.yaml
-# 设置 image、replicaCount 等默认值
-
-# 3. 修改 templates/deployment.yaml
-# 简化为基本的 Deployment 配置
-
-# 4. 预览
-helm template my-web ./web-app
-
-# 5. 安装
-helm install my-web ./web-app -n demo --create-namespace
-
-# 6. 验证
-kubectl get pods -n demo
-kubectl get svc -n demo
+helm create my-node-app
+# 修改 templates/deployment.yaml 中的 image
+# 修改 values.yaml 中的 image.repository 和 image.tag
+helm template my-node-app ./my-node-app
+# 检查输出的 YAML 是否正确
 ```
 
 ### 练习二
 
-**答案**：
+```bash
+# staging
+helm install my-app ./my-node-app -f values-staging.yaml -n staging --create-namespace
 
-```yaml
-# values-dev.yaml
-replicaCount: 1
-image:
-  tag: "latest"
-env:
-  LOG_LEVEL: debug
-resources:
-  requests:
-    cpu: 50m
-    memory: 64Mi
-  limits:
-    cpu: 100m
-    memory: 128Mi
-autoscaling:
-  enabled: false
+# production
+helm install my-app ./my-node-app -f values-production.yaml -n production --create-namespace
+
+# 验证
+kubectl get pods -n staging
+kubectl get pods -n production
 ```
 
-```yaml
-# values-prod.yaml
-replicaCount: 3
-image:
-  tag: "1.0.0"
-env:
-  LOG_LEVEL: info
-resources:
-  requests:
-    cpu: 250m
-    memory: 256Mi
-  limits:
-    cpu: 500m
-    memory: 512Mi
-autoscaling:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-```
+### 练习三
 
 ```bash
-# 安装到 dev
-helm install web-app ./web-app -f values-dev.yaml -n dev --create-namespace
-
-# 安装到 prod
-helm install web-app ./web-app -f values-prod.yaml -n prod --create-namespace
-
-# 验证差异
-helm diff release web-app -n dev
-helm diff release web-app -n prod
+helm install my-app ./my-node-app -n myapp --create-namespace
+helm upgrade my-app ./my-node-app --set image.tag=v2 -n myapp
+helm history my-app -n myapp
+helm rollback my-app 1 -n myapp
 ```
-
-**要点**：
-- 同一个 Chart 通过不同 values 文件适配不同环境
-- 生产环境应该开启 HPA 并设置合理的资源限制
-- `helm diff` 插件可以预览升级的变更

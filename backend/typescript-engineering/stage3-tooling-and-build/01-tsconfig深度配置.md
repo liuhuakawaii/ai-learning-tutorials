@@ -1,61 +1,42 @@
 # tsconfig 深度配置
 
-## 场景引入
+你接手了一个 500+ 文件的 TypeScript 项目。改一行代码，全量编译 30 秒。打开一个文件，import 路径是 `../../../../components/Button`。新同事 clone 下来，IDE 报一堆红线但代码能跑。
 
-你接手了一个有 500+ 文件的 TypeScript 项目，发现每次修改一个文件，全量编译要 30 秒；import 路径全是 `../../../../components/Button` 这种相对路径；团队成员的 IDE 提示各不相同。这些问题的根源都在 `tsconfig.json` 配置不够精细。
+这三个问题的根因都是同一个东西：tsconfig.json 配置太粗。
 
-## 学习目标
+## Strict Mode 不是一刀切
 
-- 掌握 strict mode 各个细粒度标志的含义与取舍
-- 学会配置路径别名消除相对路径地狱
-- 理解项目引用（Project References）的工作原理和配置方式
-- 掌握增量编译与 composite 项目的配置
-- 了解 moduleResolution 各选项的差异与适用场景
-
-## 一、Strict Mode 细粒度控制
-
-`"strict": true` 是一个总开关，同时启用以下所有标志。大型项目迁移时，你可能需要逐个开启而不是一次性全开。
+`"strict": true` 是个总开关，背后是 8 个独立标志。大项目直接开 strict 会爆上千个错误，正确的做法是逐个开。
 
 ```json
 {
   "compilerOptions": {
-    "strict": true,
     "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitAny": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "useUnknownInCatchVariables": true
+    "noImplicitAny": true
   }
 }
 ```
 
-| 标志 | 作用 | 典型场景 |
-|------|------|----------|
-| `strictNullChecks` | null/undefined 不能赋给其他类型 | `const x: string = null` 报错 |
-| `strictFunctionTypes` | 函数参数类型严格协变 | 回调函数类型不匹配时报错 |
-| `strictPropertyInitialization` | 类属性必须在构造器中初始化 | 未初始化的类属性报错 |
-| `noImplicitAny` | 禁止隐式 any | 未标注类型的变量报错 |
-| `useUnknownInCatchVariables` | catch 中 error 类型为 unknown | `catch(e)` 中 e 是 unknown |
+先开这两个，收益最大。`strictNullChecks` 堵住 null 穿透，`noImplicitAny` 堵住类型体操里最常见漏洞。
 
 ```typescript
-// strictNullChecks 示例
-function getUser(id: string): User | null {
-  return database.find(id) ?? null;
+// strictNullChecks 生效后
+function getUserName(id: string): string | null {
+  return database.find(id)?.name ?? null
 }
 
-const user = getUser("123");
-// console.log(user.name); // ❌ 报错：user 可能为 null
-console.log(user?.name);   // ✅ 可选链
+const name = getUserName("u_001")
+// console.log(name.toUpperCase())  // ❌ name 可能为 null
+console.log(name?.toUpperCase())    // ✅
 ```
 
-**迁移策略**：从 `strictNullChecks` 和 `noImplicitAny` 开始，这两个对代码质量提升最大。
+`strictFunctionTypes` 和 `strictBindCallApply` 放第二阶段。`strictPropertyInitialization` 放第三阶段，因为它要求类属性必须在构造器里初始化，有些老代码用 `!` 断言绕过。
 
-## 二、路径别名配置
+迁移节奏：每开一个标志，跑 `tsc --noEmit`，修完报错再开下一个。`// @ts-expect-error` 可以临时标注无法立即修的地方，但要留 TODO。
 
-路径别名可以消除深层相对路径，让 import 语句更清晰。
+## 路径别名：消灭相对路径地狱
+
+`../../../../components/Button` 这种路径，移动文件就全断。路径别名让 import 写成 `@components/Button`，文件位置变了只需要改 paths 配置。
 
 ```json
 {
@@ -64,21 +45,19 @@ console.log(user?.name);   // ✅ 可选链
     "paths": {
       "@/*": ["src/*"],
       "@components/*": ["src/components/*"],
-      "@utils/*": ["src/utils/*"],
-      "@shared/*": ["packages/shared/src/*"]
+      "@utils/*": ["src/utils/*"]
     }
   }
 }
 ```
 
-```typescript
-// 配置前：相对路径地狱
-import { Button } from "../../../../components/Button";
-// 配置后：清晰的别名路径
-import { Button } from "@components/Button";
-```
+但有个坑：`tsc` 编译时不会把 `@components/Button` 替换成真实路径。输出的 JS 里还是 `@components/Button`，运行时直接报错。
 
-**重要提醒**：`tsc` 编译时不会将路径别名转换为真实路径，需要配合 tsc-alias 或打包工具。TypeScript 5.x+ 推荐使用 bundler 模式：
+解决方案取决于你的场景：
+
+- 用打包工具（Vite/esbuild/Webpack）→ `moduleResolution: "bundler"`，打包工具自己解析别名
+- 纯 tsc 编译 → 用 `tsc-alias` 后处理
+- Node.js 直接运行 → `moduleResolution: "nodenext"` + `tsconfig-paths`
 
 ```json
 {
@@ -89,12 +68,15 @@ import { Button } from "@components/Button";
 }
 ```
 
-## 三、项目引用与 Composite 项目
+bundler 模式是目前最省心的选择，前提是你的产物确实经过打包。
 
-当项目规模增长到多个子包时，项目引用允许 TypeScript 只编译变更的部分。
+## 项目引用：500 个文件不用全编译
+
+项目引用（Project References）让 tsc 只编译变更的子项目。原理很简单：每个子项目声明自己依赖谁，tsc 按依赖顺序增量构建。
+
+根目录 tsconfig.json 只列引用，不包含任何文件：
 
 ```json
-// tsconfig.json（根目录）
 {
   "files": [],
   "references": [
@@ -104,6 +86,8 @@ import { Button } from "@components/Button";
   ]
 }
 ```
+
+每个子项目需要 `composite: true`，它会自动开启 `incremental` 和 `declaration`：
 
 ```json
 // packages/shared/tsconfig.json
@@ -120,98 +104,63 @@ import { Button } from "@components/Button";
 }
 ```
 
-```json
-// apps/web/tsconfig.json
-{
-  "compilerOptions": { "outDir": "./dist", "rootDir": "./src" },
-  "include": ["src"],
-  "references": [{ "path": "../../packages/shared" }]
-}
-```
+`declarationMap` 不是可选的——不开它，从 node_modules 跳转源码时只能看到 `.d.ts`，看不到 `.ts` 源码。
+
+编译命令换成 `tsc --build`：
 
 ```bash
-tsc --build          # 增量编译
+tsc --build          # 增量编译，只处理变更
 tsc --build --clean  # 清除构建产物
 tsc --build --watch  # watch 模式
 ```
 
-`composite: true` 的要求：必须开启 `declaration: true`，rootDir 默认为 tsconfig.json 所在目录，必须显式包含文件。
+`composite` 和 `incremental` 的区别：composite 会自动开 incremental，但 incremental 不会自动开 composite。composite 还强制要求 declaration 和显式 include，用于项目引用；incremental 单纯缓存编译状态，用于单项目加速。
 
-## 四、增量编译与 Module Resolution
+## moduleResolution：决定你怎么 import
 
-增量编译通过 `.tsbuildinfo` 文件缓存编译状态，跳过未变更文件的类型检查：
+这个配置决定 TypeScript 去哪里找 import 的文件。选错了，IDE 不报错但运行时炸。
 
-```json
-{
-  "compilerOptions": {
-    "incremental": true,
-    "tsBuildInfoFile": "./node_modules/.cache/.tsbuildinfo"
-  }
-}
-```
-
-`moduleResolution` 决定 TypeScript 如何查找 import 对应的文件：
-
-| 策略 | 特点 | 适用场景 |
-|------|------|----------|
-| `node` | 经典解析，忽略 exports 字段 | 旧项目、纯 CommonJS |
-| `node16` | 支持 exports，强制 .js 后缀 | Node.js 16+ ESM 项目 |
-| `nodenext` | node16 超集，跟进最新规范 | Node.js 最新版 |
-| `bundler` | 允许无后缀 import，支持 exports | Webpack/Vite/esbuild |
+| 策略 | 行为 | 适合 |
+|------|------|------|
+| `node` | 经典解析，忽略 package.json 的 exports 字段 | 旧项目、纯 CommonJS |
+| `node16` | 支持 exports，import 必须带 `.js` 后缀 | Node.js 16+ ESM 项目 |
+| `nodenext` | 跟进最新 Node.js 规范 | 最新 Node.js |
+| `bundler` | 允许无后缀 import，支持 exports | Vite/esbuild/Webpack |
 
 ```typescript
-// node16 模式：import 必须带 .js 后缀
-import { helper } from "./utils.js"; // ✅
-import { helper } from "./utils";    // ❌ 报错
+// node16 模式
+import { formatDate } from "./utils.js"  // ✅ 必须带 .js
+import { formatDate } from "./utils"     // ❌ 报错
 
-// bundler 模式：两种写法都可以
-import { helper } from "./utils";    // ✅
+// bundler 模式
+import { formatDate } from "./utils"     // ✅ 打包工具会处理
 ```
 
-## 常见误区
-
-1. **误以为 `strict: true` 可以一次性开启**：大项目直接开 strict 会产生上千个错误，应该逐个子选项开启
-2. **路径别名配完就不管了**：路径别名只在 IDE 中生效，编译产物中还是原始路径
-3. **`composite` 和 `incremental` 混为一谈**：composite 会自动开启 incremental，但 incremental 不会自动开启 composite
-4. **忽略 `declarationMap`**：不开 declarationMap，从 node_modules 跳转源码时只能看到 .d.ts
-
-## 工程建议
-
-1. **新建项目直接开 strict**：从第一行代码就用 strict，避免后续迁移的痛苦
-2. **路径别名统一用 `@/` 前缀**：业界最常见约定，新成员上手零成本
-3. **Monorepo 必用项目引用**：超过 3 个子包的项目，不用项目引用会导致编译时间不可接受
-4. **把 tsconfig 放进共享包**：团队内多个项目的 tsconfig 应该继承自一个共享的基础配置
-
-## 小结
-
-本课深入讲解了 tsconfig.json 的高级配置：strict mode 的细粒度控制让你渐进式提升类型安全，路径别名消除相对路径地狱，项目引用和增量编译大幅降低大项目的编译时间，moduleResolution 的选择决定了你的项目与生态的兼容性。
+node16 要求 `.js` 后缀看起来反直觉，但这是 Node.js ESM 规范的要求——ESM 不做文件扩展名自动补全。bundler 模式之所以能省掉后缀，是因为打包工具自己做了解析，不依赖 Node.js 的模块加载器。
 
 ## 练习
 
-### 练习一：Strict Mode 迁移
+### 练习一：渐进式开启 Strict
 
-你有一个旧项目，目前 `"strict": false`，包含大量隐式 any 和未检查的 null。请制定一个分阶段开启 strict mode 的计划。
+你有一个 `"strict": false` 的项目，包含大量隐式 any 和未检查的 null。写一个 tsconfig 片段，只开启 `strictNullChecks` 和 `noImplicitAny`，然后描述修复这两类报错的典型模式。
 
-### 练习二：路径别名配置
+### 练习二：路径别名 + 打包工具配合
 
-为以下项目结构配置路径别名，要求支持 `@components/Button`、`@utils/format`、`@shared/types` 三种别名写法：
+给以下项目配置路径别名 `@utils/format`，要求 Vite 开发服务器和 `tsc --noEmit` 类型检查都能正常工作：
 
 ```
 project/
 ├── src/
-│   ├── components/
 │   ├── utils/
-│   └── index.ts
-├── packages/
-│   └── shared/
-│       └── src/
-│           └── types.ts
-└── tsconfig.json
+│   │   └── format.ts
+│   └── app.ts          # import { formatDate } from "@utils/format"
+├── tsconfig.json
+└── vite.config.ts
 ```
 
 ### 练习三：项目引用
 
-给一个包含 `packages/core`、`packages/ui`、`apps/web` 的 Monorepo 配置项目引用，其中 `ui` 依赖 `core`，`web` 依赖 `ui` 和 `core`。
+给一个 Monorepo 配置项目引用，其中 `packages/core` 无依赖，`packages/ui` 依赖 `core`，`apps/web` 依赖 `ui` 和 `core`。要求 `tsc --build` 能正确按依赖顺序增量编译。
 
 ---
 
@@ -219,46 +168,61 @@ project/
 
 ### 练习一
 
-**思路**：分三阶段迁移，每阶段开启高价值标志，修复报错后再进入下一阶段。
-
-**答案**：第一阶段开启 `strictNullChecks` + `noImplicitAny`（收益最大），第二阶段加入 `strictFunctionTypes` + `strictBindCallApply`，第三阶段全量开启 `strict: true`。每阶段修复完所有报错后再进入下一阶段，可用 `// @ts-expect-error` 临时标注无法立即修复的地方。
-
-### 练习二
-
-**思路**：使用 `baseUrl` 和 `paths` 组合。
-
-**答案**：
-
 ```json
 {
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@components/*": ["src/components/*"],
-      "@utils/*": ["src/utils/*"],
-      "@shared/*": ["packages/shared/src/*"]
-    }
+    "strict": false,
+    "strictNullChecks": true,
+    "noImplicitAny": true
   }
 }
 ```
 
-**要点**：`baseUrl` 设为项目根目录，paths 中的 `*` 匹配任意路径片段，编译后需用 tsc-alias 替换别名。
+修复 `strictNullChecks` 报错的典型模式：用可选链 `?.`、空值合并 `??`、显式 null 检查。修复 `noImplicitAny` 的模式：给参数加类型标注、用 `unknown` 代替 `any`、为第三方库补 `@types/*`。
+
+### 练习二
+
+tsconfig.json 需要 `moduleResolution: "bundler"` 配合 paths。vite.config.ts 需要 `resolve.alias` 映射相同路径。两边必须同步，缺一边就会一边报错一边正常。
+
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "paths": { "@utils/*": ["src/utils/*"] }
+  }
+}
+```
+
+```typescript
+// vite.config.ts
+import { defineConfig } from "vite"
+import path from "path"
+
+export default defineConfig({
+  resolve: { alias: { "@utils": path.resolve(__dirname, "src/utils") } },
+})
+```
 
 ### 练习三
 
-**思路**：每个子包需要 `composite: true`，通过 `references` 声明依赖关系。
-
-**答案**：
-
 ```json
+// 根目录 tsconfig.json
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/ui" },
+    { "path": "./apps/web" }
+  ]
+}
 // packages/core/tsconfig.json
 { "compilerOptions": { "composite": true, "outDir": "./dist", "declaration": true, "declarationMap": true }, "include": ["src"] }
 // packages/ui/tsconfig.json
 { "compilerOptions": { "composite": true, "outDir": "./dist", "declaration": true, "declarationMap": true }, "include": ["src"], "references": [{ "path": "../core" }] }
 // apps/web/tsconfig.json
 { "compilerOptions": { "composite": true, "outDir": "./dist" }, "include": ["src"], "references": [{ "path": "../../packages/core" }, { "path": "../../packages/ui" }] }
-// 根目录 tsconfig.json
-{ "files": [], "references": [{ "path": "./packages/core" }, { "path": "./packages/ui" }, { "path": "./apps/web" }] }
 ```
 
-**要点**：被依赖的包必须开启 `composite: true`，根目录只声明引用顺序，使用 `tsc --build` 触发增量编译。
+根目录的 references 顺序决定了构建顺序。`tsc --build` 会先编译 core，再编译 ui（依赖 core 的产物），最后编译 web。

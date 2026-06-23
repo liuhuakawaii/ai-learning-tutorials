@@ -1,15 +1,8 @@
 # 阶段实战：数据清洗 Pipeline
 
-## 场景引入
+## 问题背景
 
-你收到一批来自不同系统的数据文件：销售部的 CSV、财务部的 Excel、运营部的 JSON。每个文件的编码不同、列名不统一、数据格式各异。你需要把它们清洗、整合、验证，最终输出一份干净的数据集和一份质量报告。这是本阶段的综合实战，将用到文件操作、CSV/Excel 处理、正则表达式等所有技能。
-
-## 学习目标
-
-- 能设计一个可扩展的数据清洗 Pipeline 架构
-- 实现多格式数据输入（CSV、Excel、JSON）
-- 实现自动编码检测、去重、类型转换、缺失值处理
-- 实现数据验证规则引擎和质量报告输出
+你收到一批来自不同系统的数据文件：销售部的 CSV、财务部的 Excel、运营部的 JSON。编码不同、列名不统一、数据格式各异。需要清洗、整合、验证，输出干净的数据集和质量报告。
 
 ## Pipeline 设计
 
@@ -17,9 +10,7 @@
 输入 → 读取 → 编码检测 → 列名标准化 → 类型转换 → 去重 → 缺失值处理 → 验证 → 输出
 ```
 
-每个阶段是一个独立函数，Pipeline 负责串联执行。
-
-## 第一步：配置与数据模型
+每个阶段是独立函数，Pipeline 负责串联。先定义配置和数据模型：
 
 ```python
 from dataclasses import dataclass, field
@@ -50,7 +41,9 @@ class QualityReport:
     encoding_detected: dict[str, str] = field(default_factory=dict)
 ```
 
-## 第二步：编码检测与文件读取
+## 编码检测与文件读取
+
+中文环境常见编码：UTF-8、GBK、GB2312。逐个尝试直到成功：
 
 ```python
 import json
@@ -80,7 +73,7 @@ def read_file(file_path: str) -> pd.DataFrame:
     raise ValueError(f"不支持的格式: {suffix}")
 ```
 
-## 第三步：数据处理函数
+## 数据处理函数
 
 ```python
 import re
@@ -133,7 +126,9 @@ def handle_missing(df: pd.DataFrame, strategy: dict[str, Any], report: QualityRe
     return df
 ```
 
-## 第四步：数据验证与报告
+`convert_types` 中用 `errors="coerce"` 把无法转换的值变成 NaN，通过前后差值记录转换异常数量。
+
+## 验证与报告
 
 ```python
 def validate_data(df: pd.DataFrame, rules: dict[str, callable], report: QualityReport) -> pd.DataFrame:
@@ -171,14 +166,13 @@ def generate_report(report: QualityReport, output_path: str) -> None:
         lines.append("\n验证失败:")
         for col, n in report.validation_errors.items():
             lines.append(f"  {col}: {n} 行不通过")
-    lines += ["", "=" * 50]
     text = "\n".join(lines)
     print(text)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(text)
 ```
 
-## 第五步：Pipeline 主类
+## Pipeline 主类
 
 ```python
 class DataCleaningPipeline:
@@ -244,53 +238,37 @@ def main():
     )
     result = DataCleaningPipeline(config).run()
     print(f"最终: {len(result)} 行, {len(result.columns)} 列")
-
-if __name__ == "__main__":
-    main()
 ```
 
-## 常见误区
+## 踩坑提醒
 
-1. **不检测编码直接读取**：GBK 文件用 UTF-8 读会报错，应先调用 `detect_encoding()`
-2. **去重后忘记重置索引**：`drop_duplicates()` 后要加 `.reset_index(drop=True)`
-3. **验证规则写得太严格**：如要求金额必须是整数，排除了合法的 0.5 元
-4. **忘记保留原始数据**：清洗后的数据应另存，不要覆盖原始文件
+**不检测编码直接读取**：GBK 文件用 UTF-8 读会报错。先调 `detect_encoding()`。
 
-## 工程建议
+**去重后忘记重置索引**：`drop_duplicates()` 后加 `.reset_index(drop=True)`。
 
-1. **Pipeline 阶段化设计**：每个阶段独立，便于测试和调试
-2. **编码检测用多种编码尝试**：中文环境优先尝试 UTF-8 和 GBK
-3. **验证规则用 lambda 或函数**：灵活且可复用
-4. **质量报告必须输出**：让数据问题可追溯
-5. **保留原始数据**：清洗后的数据另存
+**验证规则写得太严格**：要求金额必须是整数，排除了合法的 0.5 元。
 
-## 小结
-
-本节综合运用了本阶段所有技能：`pathlib` 做文件操作、`pandas` 做数据处理、正则表达式做模式匹配，构建了一个完整的数据清洗 Pipeline。支持多格式输入、自动编码检测、去重、类型转换、缺失值处理、数据验证和质量报告输出。
+**覆盖原始数据**：清洗后的数据应另存，不要覆盖原始文件。
 
 ## 练习
 
 ### 练习一：扩展 Pipeline 支持数据合并
 
-为 Pipeline 添加 `merge_rules` 配置，支持将多个输入文件按指定列合并（类似 SQL JOIN）。
+添加 `merge_rules` 配置，支持将多个输入文件按指定列合并（类似 SQL JOIN）。
 
 ### 练习二：添加数据转换函数
 
-为 Pipeline 添加 `transform_functions` 配置，支持对特定列应用自定义转换函数（如手机号加 `+86` 前缀，金额分转元）。
+添加 `transform_functions` 配置，支持对特定列应用自定义转换（如手机号加 `+86` 前缀，金额分转元）。
 
 ### 练习三：实现增量清洗
 
-修改 Pipeline 支持增量模式：只处理新增数据（与上次输出对比找出新行），追加到已有输出文件。
+修改 Pipeline 支持增量模式：只处理新增数据，追加到已有输出文件。
 
 ---
 
 ## 参考答案
 
 ### 练习一
-
-**思路**：在配置中添加 `merge_rules`，在合并阶段进行 join 操作。
-
-**答案**：
 
 ```python
 @dataclass
@@ -306,13 +284,9 @@ def apply_merge_rules(df: pd.DataFrame, rules: list[MergeRule]) -> pd.DataFrame:
     return df
 ```
 
-**要点**：`how` 参数对应 SQL JOIN 类型；`suffixes` 处理同名列。
+`how` 参数对应 SQL JOIN 类型；`suffixes` 处理同名列。
 
 ### 练习二
-
-**思路**：在配置中添加转换函数字典，在类型转换后应用。
-
-**答案**：
 
 ```python
 def apply_transforms(df: pd.DataFrame, transforms: dict[str, callable]) -> pd.DataFrame:
@@ -328,13 +302,9 @@ transform_functions = {
 }
 ```
 
-**要点**：每个函数内部要处理 NaN；转换失败不应中断 Pipeline。
+每个函数内部要处理 NaN；转换失败不应中断 Pipeline。
 
 ### 练习三
-
-**思路**：读取已有输出，与新数据对比找出新增行，追加写入。
-
-**答案**：
 
 ```python
 def incremental_clean(config: PipelineConfig, key_columns: list[str]) -> pd.DataFrame:
@@ -364,4 +334,4 @@ def incremental_clean(config: PipelineConfig, key_columns: list[str]) -> pd.Data
     return result
 ```
 
-**要点**：用 key_columns 组合判断新数据；增量模式只清洗新数据；首次运行处理全量。
+用 key_columns 组合判断新数据；增量模式只清洗新数据；首次运行处理全量。

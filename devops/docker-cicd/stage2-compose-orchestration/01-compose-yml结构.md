@@ -1,331 +1,264 @@
-# 第一课：compose.yml 结构
+# docker-compose.yml 结构
 
-> **课程定位**：理解 Docker Compose 的核心概念和文件结构
-> **前置知识**：Docker 基础、Dockerfile（第一阶段）
-> **预计时长**：30 分钟
+> 前置知识：Docker 基础、Dockerfile（第一阶段）
 
----
+## 三条命令引发的思考
 
-## 场景引入
+你的项目有三个服务：Node.js API、PostgreSQL、Redis。每次启动项目：
 
-你的项目有三个服务：Node.js API、PostgreSQL 数据库、Redis 缓存。每次启动项目，你都要打开三个终端窗口，分别执行三条 `docker run` 命令，还要记清楚网络名、端口映射、环境变量。某天你漏了一个参数，数据库连接不上，排查了半小时。你开始想：能不能把这些命令写成一个配置文件，一条命令搞定？
+```bash
+# 终端 1
+docker run -d --name my-db -e POSTGRES_PASSWORD=secret -v pgdata:/var/lib/postgresql/data postgres:14
 
----
+# 终端 2
+docker run -d --name my-redis redis:7
 
-## 学习目标
-
-完成本课学习后，你将能够：
-
-1. 理解 Docker Compose 解决什么问题
-2. 掌握 compose.yml 的基本结构
-3. 理解 service、network、volume 的关系
-4. 使用 docker compose 命令管理多容器应用
-
----
-
-## 一、为什么需要 Docker Compose
-
-### 1.1 单容器的局限
-
-```
-一个真实的 Web 应用通常需要多个服务：
-
-  ┌─────────────────────────────────────────┐
-  │           你的应用                        │
-  │                                          │
-  │  ┌────────┐  ┌────────┐  ┌────────┐    │
-  │  │ Web App│  │Database│  │ Cache  │    │
-  │  │ Node.js│  │Postgres│  │ Redis  │    │
-  │  └────────┘  └────────┘  └────────┘    │
-  └─────────────────────────────────────────┘
-
-  如果用 docker run 逐个启动：
-
-  docker network create app-net
-  docker volume create pgdata
-  docker run -d --name postgres --network app-net -v pgdata:/var/lib/postgresql/data -e POSTGRES_PASSWORD=secret postgres:14
-  docker run -d --name redis --network app-net redis:7
-  docker run -d --name app --network app-net -p 3000:3000 -e DATABASE_URL=... my-app
-
-  问题：
-  ├── 命令太长，容易出错
-  ├── 启动顺序难控制
-  ├── 环境变量散落在命令中
-  └── 无法一键启停所有服务
+# 终端 3
+docker run -d --name my-api -p 3000:3000 -e DATABASE_URL=postgres://postgres:secret@my-db:5432/mydb -e REDIS_URL=redis://my-redis:6379 --network app-net my-api:1.0
 ```
 
-### 1.2 Docker Compose 的解决方案
+三条命令，十几个参数。某天你漏了 `--network`，API 连不上数据库，排查了半小时。某天同事想跑这个项目，问你"需要哪些环境变量"，你翻了半天才找全。
 
-```
-Docker Compose = 用一个 YAML 文件描述所有服务，一条命令管理
+问题不是"能不能跑"，而是"能不能一条命令跑、能不能让别人也一条命令跑"。docker-compose.yml 就是来解决这个问题的。
 
-  docker compose up -d      ← 启动所有服务
-  docker compose down       ← 停止所有服务
-  docker compose logs       ← 查看所有日志
-  docker compose ps         ← 查看所有状态
-```
+## compose.yml 长什么样
 
----
-
-## 二、compose.yml 基本结构
-
-### 2.1 最小示例
+把上面三条命令翻译成配置文件：
 
 ```yaml
-# compose.yml
 services:
-  app:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+
+  api:
     build: .
     ports:
       - "3000:3000"
-```
+    environment:
+      DATABASE_URL: postgres://postgres:secret@db:5432/mydb
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
-### 2.2 完整结构
-
-```yaml
-# 顶层配置
-name: my-project           # 项目名称（可选）
-
-# 服务定义
-services:
-  app:                     # 服务名称
-    build: .               # 构建配置
-    ports:                 # 端口映射
-      - "3000:3000"
-    environment:           # 环境变量
-      - NODE_ENV=production
-    depends_on:            # 依赖关系
-      - postgres
-    networks:              # 网络
-      - app-network
-
-  postgres:
-    image: postgres:14     # 使用现成镜像
-    volumes:               # 数据卷
-      - pgdata:/var/lib/postgresql/data
-    networks:
-      - app-network
-
-# 网络定义
-networks:
-  app-network:
-    driver: bridge
-
-# 卷定义
 volumes:
   pgdata:
 ```
 
-### 2.3 顶层元素说明
+一条命令启动：
 
-```
-compose.yml 的四个顶层元素：
-
-  ┌─────────────────────────────────────────────────────┐
-  │  services     定义各个服务（容器）                    │
-  │  networks     定义网络                               │
-  │  volumes      定义持久化卷                           │
-  │  configs      定义配置文件（高级）                    │
-  └─────────────────────────────────────────────────────┘
-
-  其中 services 是必须的，其他可选。
+```bash
+docker compose up
 ```
 
----
+一条命令销毁：
 
-## 三、services 详解
+```bash
+docker compose down
+```
 
-### 3.1 镜像来源
+## 文件结构
+
+compose.yml 的顶层只有四种元素：
+
+```yaml
+services:    # 你要跑哪些容器
+  api:
+    ...
+  db:
+    ...
+
+networks:    # 容器之间怎么通信（可选，默认自动创建）
+  default:
+    driver: bridge
+
+volumes:     # 数据怎么持久化（可选）
+  pgdata:
+
+configs:     # 配置文件注入（可选）
+  app-config:
+    file: ./config.json
+```
+
+90% 的场景只需要 `services` 和 `volumes`。`networks` 用默认行为就行，`configs` 是进阶用法。
+
+## service 的核心字段
 
 ```yaml
 services:
-  # 方式一：使用现成镜像
-  postgres:
-    image: postgres:14
+  api:
+    # ---- 镜像来源（二选一）----
+    image: node:18-alpine       # 直接用现成镜像
+    build:                      # 或者从 Dockerfile 构建
+      context: .
+      dockerfile: Dockerfile
+      target: production        # 多阶段构建时指定目标阶段
 
-  # 方式二：从 Dockerfile 构建
-  app:
-    build: .                        # 使用当前目录的 Dockerfile
-    build:
-      context: .                    # 构建上下文
-      dockerfile: Dockerfile.prod   # 指定 Dockerfile
-
-  # 方式三：同时指定 image 和 build
-  app:
-    build: .
-    image: my-app:1.0               # 构建后打上这个标签
-```
-
-### 3.2 端口映射
-
-```yaml
-services:
-  app:
+    # ---- 网络 ----
     ports:
-      - "3000:3000"           # 宿主机端口:容器端口
-      - "8080:80"             # 宿主机 8080 映射到容器 80
-      - "127.0.0.1:3000:3000" # 只允许本地访问
-      - "3000"               # 随机分配宿主机端口
-```
+      - "3000:3000"             # 宿主机端口:容器端口
 
-### 3.3 环境变量
-
-```yaml
-services:
-  app:
-    # 方式一：直接定义
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_URL=postgres://user:pass@postgres:5432/db
-
-    # 方式二：从 .env 文件读取
-    env_file:
-      - .env
-
-    # 方式三：字典格式
+    # ---- 环境 ----
     environment:
       NODE_ENV: production
-      PORT: "3000"
-```
+      DATABASE_URL: postgres://...
+    env_file:
+      - .env                    # 从文件读取环境变量
 
-> 这里只展示语法。如何安全地管理环境变量（.env 文件策略、多环境配置、密钥管理），详见第四课。
+    # ---- 存储 ----
+    volumes:
+      - ./src:/app/src          # bind mount（开发用）
+      - api-logs:/app/logs      # named volume（持久化）
 
-### 3.4 依赖关系
-
-```yaml
-services:
-  app:
+    # ---- 依赖与健康检查 ----
     depends_on:
-      postgres:
-        condition: service_healthy    # 等 postgres 健康后再启动
-      redis:
-        condition: service_started    # 等 redis 启动后
-
-  postgres:
-    image: postgres:14
+      db:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+    # ---- 资源限制 ----
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+    # ---- 重启策略 ----
+    restart: unless-stopped
 ```
 
-> `depends_on` 只保证容器启动，不保证服务就绪。配合 `healthcheck` + `condition: service_healthy` 才能确保服务真正可用。详见第六课。
-
----
-
-## 四、常用命令
-
-```bash
-# 启动所有服务（后台运行）
-docker compose up -d
-
-# 启动并重新构建镜像
-docker compose up -d --build
-
-# 停止所有服务
-docker compose down
-
-# 停止并删除卷
-docker compose down -v
-
-# 查看服务状态
-docker compose ps
-
-# 查看日志
-docker compose logs
-docker compose logs -f          # 实时跟踪
-docker compose logs app         # 只看 app 的日志
-
-# 重启某个服务
-docker compose restart app
-
-# 进入容器
-docker compose exec app sh
-
-# 执行一次性命令
-docker compose run --rm app npm test
-
-# 查看 compose 配置（检查语法）
-docker compose config
-```
-
----
-
-## 五、动手练习
-
-### 练习一：最小 Compose
-
-创建一个最简单的 compose.yml：
+不是每个字段都需要写。一个最简单的 service 只需要 `image`（或 `build`）：
 
 ```yaml
-# compose.yml
 services:
-  web:
-    image: nginx:alpine
-    ports:
-      - "8080:80"
-```
-
-```bash
-docker compose up -d
-curl http://localhost:8080
-docker compose down
-```
-
-### 练习二：多服务
-
-```yaml
-# compose.yml
-services:
-  app:
-    image: node:18-alpine
-    command: sh -c "echo 'Hello from Node' && sleep 3600"
-    
   redis:
     image: redis:7
 ```
 
-```bash
-docker compose up -d
-docker compose ps
-docker compose logs app
-docker compose down
+## 常见的坑
+
+### 坑一：启动顺序不等于就绪顺序
+
+`depends_on` 只保证容器"启动了"，不保证服务"就绪了"。PostgreSQL 容器启动后还需要几秒钟初始化数据库，在这段时间内 API 连接会失败。
+
+解决方式：用 `healthcheck` + `condition: service_healthy`。上面的 compose.yml 已经展示了这个模式。
+
+### 坑二：环境变量里的敏感信息
+
+```yaml
+# 不推荐：密码直接写在 compose.yml 里
+environment:
+  POSTGRES_PASSWORD: my-secret-password
 ```
 
----
+compose.yml 会被提交到 Git。密码不应该出现在版本控制中。
 
-## 常见误区
+```yaml
+# 推荐：从 .env 文件读取
+env_file:
+  - .env
+```
 
-- **"depends_on 保证服务可用"**：`depends_on` 只保证容器启动，不保证服务就绪。数据库容器启动后还需要几秒初始化，必须配合 `healthcheck` + `condition: service_healthy` 才能确保服务真正可用。
-- **"Compose 文件名必须是 docker-compose.yml"**：新版 Docker Compose 支持 `compose.yml` 作为默认文件名，不需要 `docker-` 前缀。两者都支持，但推荐用更简洁的 `compose.yml`。
-- **"docker compose down 会删除所有数据"**：默认情况下 `down` 只停止和删除容器，不会删除 Volume 中的数据。加 `-v` 参数才会删除 Volume。
-- **"Compose 只能用于开发环境"**：Compose 也适用于小型生产部署。对于不需要 Kubernetes 级别编排的项目，Compose 是更简单实用的选择。
+```bash
+# .env（加入 .gitignore）
+POSTGRES_PASSWORD=actual-secret
+```
 
----
+### 坑三：bind mount 在生产环境的陷阱
 
-## 工程建议
+```yaml
+volumes:
+  - ./src:/app/src  # 开发时用，热更新很方便
+```
 
-- **用 `docker compose config` 检查语法**：修改 compose.yml 后先跑 `config` 验证，避免启动时才发现格式错误。
-- **为服务配置 `restart: unless-stopped`**：生产环境中服务崩溃后自动重启，但手动停止后不会自动启动，兼顾可靠性和可控性。
-- **用 `docker compose logs -f service-name` 定位问题**：不要看所有服务的日志混在一起，按服务名过滤更高效。
-- **把 compose.yml 纳入版本控制**：compose.yml 是项目基础设施配置，应该和代码一起维护，但 `.env` 文件不要提交。
+bind mount 把宿主机的文件直接映射到容器里。开发时很方便——改代码不需要重新构建。但生产环境不能用：宿主机上的文件状态不可控，而且绑定了宿主机的文件系统路径。
 
----
+生产环境应该用 Named Volume 持久化数据，用镜像打包代码。
 
-## 小结
+## 用 Compose 做开发 vs 做生产
 
-1. **Docker Compose** 用一个 YAML 文件管理多容器应用
-2. **services** 定义各个容器，**networks** 定义网络，**volumes** 定义持久化卷
-3. **`docker compose up -d`** 启动，**`docker compose down`** 停止
-4. **`depends_on`** 控制服务启动顺序，配合 `healthcheck` 更可靠
+同一个 compose.yml 通常不能同时服务开发和生产。推荐用 override 文件：
 
----
+```yaml
+# compose.yml（基础配置）
+services:
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:secret@db:5432/mydb
 
-## 下一课预告
+# compose.override.yml（开发覆盖，自动加载）
+services:
+  api:
+    volumes:
+      - ./src:/app/src
+    environment:
+      NODE_ENV: development
+```
 
-下一课我们将深入学习 service、network、volume 的详细配置。
+生产环境只加载基础配置：
+
+```bash
+docker compose -f compose.yml up -d
+```
+
+开发环境自动加载 override：
+
+```bash
+docker compose up -d
+```
+
+## 练习
+
+### 练习一：补全 compose.yml
+
+以下 compose.yml 缺少几个关键配置。补全它，使得：
+- API 能连上数据库
+- 数据库数据持久化
+- 一条命令启动所有服务
+
+```yaml
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ???
+
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_PASSWORD: secret
+```
+
+### 练习二：健康检查
+
+为上面的 db service 添加健康检查，使用 `pg_isready -U postgres` 命令。然后修改 api 的 `depends_on`，让它等数据库真正就绪后再启动。
+
+### 练习三：开发环境 override
+
+创建一个 `compose.override.yml`，实现：
+- API 使用 bind mount 挂载 `./src` 目录
+- API 的 NODE_ENV 设为 development
+- 额外启动一个 adminer 服务（`adminer` 镜像，端口 8080）方便查看数据库
 
 ---
 
@@ -333,91 +266,75 @@ docker compose down
 
 ### 练习一
 
-**思路**：创建一个最简单的 compose.yml，只包含一个 Nginx 服务，验证 `docker compose up -d` 能否一键启动并访问。这是理解 Compose 基本工作流的最小实验。
-
-**答案**：
-
 ```yaml
-# compose.yml
 services:
-  web:
-    image: nginx:alpine
+  api:
+    build: .
     ports:
-      - "8080:80"
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://postgres:secret@db:5432/postgres
+    depends_on:
+      - db
+
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
 ```
 
-```bash
-# 启动服务
-docker compose up -d
-
-# 验证服务运行
-docker compose ps
-# 预期输出：web 服务状态为 Up，端口映射 0.0.0.0:8080->80/tcp
-
-# 测试访问
-curl http://localhost:8080
-# 预期输出：Nginx 默认欢迎页面的 HTML
-
-# 查看日志
-docker compose logs web
-# 预期看到 Nginx 的启动日志和访问日志
-
-# 停止并清理
-docker compose down
-```
-
-**要点**：
-- `services` 是 compose.yml 中唯一必须的顶层元素
-- `image: nginx:alpine` 使用现成镜像，不需要 Dockerfile
-- `ports: "8080:80"` 将宿主机 8080 端口映射到容器 80 端口
-- `docker compose up -d` 一条命令启动，`docker compose down` 一条命令清理
-- Compose 自动创建默认网络，即使只有一个服务
+关键点：api 的 `DATABASE_URL` 里 host 写 `db`（service 名），不是 `localhost`。Compose 会自动创建网络，容器间通过 service 名互相访问。
 
 ### 练习二
 
-**思路**：在 compose.yml 中定义多个服务，验证它们在同一个默认网络中可以通过服务名互相访问。观察多服务的启动、日志和状态管理。
+```yaml
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://postgres:secret@db:5432/postgres
+    depends_on:
+      db:
+        condition: service_healthy
 
-**答案**：
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
+```
+
+### 练习三
 
 ```yaml
-# compose.yml
+# compose.override.yml
 services:
-  app:
-    image: node:18-alpine
-    command: sh -c "echo 'Hello from Node' && sleep 3600"
+  api:
+    volumes:
+      - ./src:/app/src
+    environment:
+      NODE_ENV: development
 
-  redis:
-    image: redis:7
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
 ```
 
-```bash
-# 启动所有服务
-docker compose up -d
-
-# 查看服务状态
-docker compose ps
-# 预期输出：app 和 redis 两个服务都为 Up
-
-# 查看 app 的日志
-docker compose logs app
-# 预期输出：Hello from Node
-
-# 验证网络互通（app 可以通过服务名访问 redis）
-docker compose exec app sh -c "wget -qO- http://redis:6379 || echo 'Redis is reachable by service name'"
-
-# 只查看 redis 日志
-docker compose logs redis
-
-# 重启单个服务
-docker compose restart app
-
-# 停止所有服务
-docker compose down
-```
-
-**要点**：
-- 多个服务定义在同一个 `services` 下，`docker compose up -d` 一键全部启动
-- Compose 自动创建默认网络，所有服务可以通过服务名（如 `redis`）互相访问
-- `docker compose logs app` 按服务名过滤日志，比看混在一起的日志更清晰
-- `command` 字段覆盖容器的默认启动命令
-- `sleep 3600` 让容器保持运行，否则 `echo` 执行完容器就会退出
+adminer 启动后访问 `http://localhost:8080`，用 `db` 作为数据库地址、`postgres` 用户、`secret` 密码连接。

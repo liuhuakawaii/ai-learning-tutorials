@@ -1,456 +1,175 @@
-# 第7课：阶段实战——Dashboard 交互优化
+# 阶段实战：Dashboard 交互优化——把 INP 从 500ms 降到 100ms
 
-> **课程定位**：综合运用 React/Next.js 性能优化知识，优化一个 Dashboard 页面
-> **前置知识**：React 渲染机制、状态设计、memo、虚拟滚动、Next.js 优化
-> **预计时长**：60 分钟
+## 现象
 
-## 场景引入
+你的 Dashboard 页面有大量数据表格和图表。用户点击"排序"按钮后，页面卡顿 500ms 才有反应。CPU 4x 节流下更严重。
 
-你的 SaaS Dashboard 页面有 4 个统计卡片、3 个筛选器、一个 1000 行的数据表格和一个实时图表。用户反馈：搜索框输入字符时明显卡顿，切换筛选条件后要等半秒表格才更新，滚动表格时掉帧严重。你用 Profiler 录制了一次操作，发现每次按键都触发了整个 Dashboard 的 50+ 个组件重渲染，其中 40 个组件和输入完全无关。问题不在于单个组件慢，而在于状态设计和组件结构导致了大量不必要的渲染。
+## 排查过程
 
----
+### 第一步：定位长任务
 
-## 学习目标
-
-1. 识别 Dashboard 中的性能瓶颈
-2. 优化筛选和搜索交互的响应速度
-3. 优化大表格的渲染性能
-4. 减少不必要的重渲染
-5. 记录优化前后的数据对比
-
----
-
-## 一、实战页面
-
-本阶段讲的是 React / Next 性能，但课程内置 demo 用原生 JavaScript 复现同类瓶颈，便于直接观察 DOM 数量、主线程长任务和输入延迟。默认练习页：
-
-```text
-frontend-performance-course/final-project/performance-rescue-demo/work.html
-```
-
-你要优化搜索、排序、加入购物车和大列表渲染，并在报告里说明如果迁移到 React / Next，应如何用状态下沉、memo、useMemo、虚拟滚动和 Server Components 处理。
-
-一个典型的 SaaS Dashboard，也会包含以下同类功能：
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Dashboard 功能结构                          │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌─────────────────────────────────────────────────────┐     │
-│  │  Header: 搜索框 + 用户菜单 + 通知                   │     │
-│  └─────────────────────────────────────────────────────┘     │
-│                                                              │
-│  ┌──────────┐  ┌──────────────────────────────────────┐      │
-│  │          │  │  Stats Cards: 4 个统计卡片            │      │
-│  │ Sidebar  │  ├──────────────────────────────────────┤      │
-│  │          │  │  Filters: 日期范围 + 类别 + 状态     │      │
-│  │ 导航菜单 │  ├──────────────────────────────────────┤      │
-│  │          │  │  Table: 1000+ 行数据表格              │      │
-│  │          │  │  - 可排序                             │      │
-│  │          │  │  - 可筛选                             │      │
-│  │          │  │  - 可分页                             │      │
-│  │          │  ├──────────────────────────────────────┤      │
-│  │          │  │  Chart: 数据图表                      │      │
-│  └──────────┘  └──────────────────────────────────────┘      │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-包含的性能问题：
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    性能问题清单                                │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  渲染问题：                                                   │
-│  □ 所有状态在顶层 → 任何变化都导致全页面渲染                  │
-│  □ 搜索输入没有防抖 → 每次按键都触发过滤                      │
-│  □ 表格每次渲染所有行 → 1000+ DOM 节点                        │
-│  □ 图表组件没有 memo → 筛选时也被带动渲染                     │
-│                                                              │
-│  数据问题：                                                   │
-│  □ 筛选在客户端进行 → 大数组每次重新计算                      │
-│  □ 没有缓存 → 切换标签页重新获取                              │
-│                                                              │
-│  交互问题：                                                   │
-│  □ 排序触发长任务 → 大数组排序阻塞主线程                      │
-│  □ 筛选没有批处理 → 连续筛选触发多次渲染                      │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 二、性能诊断
-
-### 2.1 Profiler 录制
-
-```
-操作步骤：
-1. 打开 React DevTools Profiler
-2. 录制以下操作：
-   a. 在搜索框输入字符
-   b. 切换筛选条件
-   c. 点击表头排序
-   d. 滚动表格
-3. 查看 Flamegraph，找出：
-   - 哪些组件不必要地渲染了
-   - 每次渲染的耗时
-   - 渲染的原因
-```
-
-### 2.2 基线数据
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    基线数据（优化前）                          │
-├─────────────────────┬────────────────────────────────────────┤
-│ 操作                 │ 响应时间                               │
-├─────────────────────┼────────────────────────────────────────┤
-│ 搜索输入（每个字符） │ 350ms                                 │
-│ 切换筛选条件         │ 500ms                                 │
-│ 排序                 │ 800ms                                 │
-│ 滚动表格             │ 掉帧明显                              │
-│ 渲染组件数           │ 全页面 50+ 组件                       │
-└─────────────────────┴────────────────────────────────────────┘
-```
-
----
-
-## 三、优化步骤
-
-### 步骤 1：状态下沉
-
-```jsx
-// ❌ 之前：所有状态在 Dashboard 顶层
-function Dashboard() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [category, setCategory] = useState('all');
-  const [status, setStatus] = useState('all');
-  const [sortField, setSortField] = useState('date');
-  const [sortOrder, setSortOrder] = useState('desc');
-
-  // 所有子组件都因为这些状态变化而渲染
-  return (
-    <div>
-      <Header query={searchQuery} onSearch={setSearchQuery} />
-      <StatsCards data={stats} />
-      <Filters
-        dateRange={dateRange} onDateChange={setDateRange}
-        category={category} onCategoryChange={setCategory}
-        status={status} onStatusChange={setStatus}
-      />
-      <DataTable
-        data={filteredData}
-        sortField={sortField} sortOrder={sortOrder}
-        onSort={handleSort}
-      />
-      <DataChart data={chartData} />
-    </div>
-  );
-}
-
-// ✅ 之后：状态下沉到各自需要的组件
-function Dashboard() {
-  return (
-    <div>
-      <Header />
-      <StatsCards />
-      <FiltersPanel />
-      <DataTableSection />
-      <ChartSection />
-    </div>
-  );
-}
-
-function Header() {
-  const [query, setQuery] = useState('');
-  // 只有 Header 渲染
-  return <input value={query} onChange={e => setQuery(e.target.value)} />;
-}
-
-function FiltersPanel() {
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [category, setCategory] = useState('all');
-  const [status, setStatus] = useState('all');
-  // 只有 FiltersPanel 渲染
-}
-```
-
-### 步骤 2：搜索防抖
-
-```jsx
-function SearchInput() {
-  const [inputValue, setInputValue] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-
-  // 防抖：300ms 后才更新实际搜索值
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(inputValue);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [inputValue]);
-
-  // debouncedQuery 变化时才触发搜索
-  useEffect(() => {
-    if (debouncedQuery) {
-      performSearch(debouncedQuery);
+```javascript
+const observer = new PerformanceObserver((list) => {
+  for (const entry of list.getEntries()) {
+    if (entry.duration > 50) {
+      console.log(`Long Task: ${entry.duration.toFixed(0)}ms`, entry.attribution)
     }
-  }, [debouncedQuery]);
-
-  return (
-    <input
-      value={inputValue}
-      onChange={e => setInputValue(e.target.value)}
-      placeholder="Search..."
-    />
-  );
-}
+  }
+})
+observer.observe({ type: 'longtask', buffered: true })
 ```
 
-### 步骤 3：表格虚拟滚动
+### 第二步：分析主线程
 
-```jsx
-import { FixedSizeList } from 'react-window';
+Performance 面板录制后，找到长任务的调用栈：
+```
+SortButton.onClick
+  → sortProducts() 280ms（排序 10000 条数据）
+  → renderList() 200ms（渲染 10000 个 DOM 节点）
+```
 
-function DataTable({ data }) {
-  const [sortField, setSortField] = useState('date');
-  const [sortOrder, setSortOrder] = useState('desc');
+### 第三步：优化
 
-  // useMemo 缓存排序结果
-  const sortedData = useMemo(() => {
-    return [...data].sort((a, b) => {
-      const aVal = a[sortField];
-      const bVal = b[sortField];
-      return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
-    });
-  }, [data, sortField, sortOrder]);
+```typescript
+// 优化 1：用 Web Worker 排序
+const sortWorker = new Worker(new URL('./sort.worker.ts', import.meta.url))
 
-  const Row = memo(({ index, style }) => {
-    const item = sortedData[index];
-    return (
-      <div style={style} className="table-row">
-        <span>{item.name}</span>
-        <span>{item.date}</span>
-        <span>{item.amount}</span>
-        <span className={`status-${item.status}`}>{item.status}</span>
+function handleSort(key: string) {
+  sortWorker.postMessage({ data: products, key })
+  sortWorker.onmessage = (e) => {
+    setSortedProducts(e.data)
+  }
+}
+
+// 优化 2：虚拟滚动，只渲染可见区域
+import { useVirtualizer } from '@tanstack/react-virtual'
+
+function VirtualList({ items }) {
+  const parentRef = useRef(null)
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+  })
+
+  return (
+    <div ref={parentRef} style={{ height: '600px', overflow: 'auto' }}>
+      <div style={{ height: virtualizer.getTotalSize() }}>
+        {virtualizer.getVirtualItems().map(row => (
+          <div key={row.key} style={{
+            position: 'absolute',
+            top: row.start,
+            height: row.size,
+            width: '100%'
+          }}>
+            {items[row.index].name}
+          </div>
+        ))}
       </div>
-    );
-  });
-
-  return (
-    <div>
-      <TableHeader sortField={sortField} sortOrder={sortOrder} onSort={handleSort} />
-      <FixedSizeList
-        height={500}
-        itemCount={sortedData.length}
-        itemSize={48}
-        width="100%"
-      >
-        {Row}
-      </FixedSizeList>
     </div>
-  );
+  )
+}
+
+// 优化 3：用 startTransition 标记低优先级更新
+import { startTransition } from 'react'
+
+function handleSearch(query: string) {
+  // 高优先级：输入框立即响应
+  setSearchInput(query)
+
+  // 低优先级：搜索结果可以延迟
+  startTransition(() => {
+    setSearchResults(filterItems(query))
+  })
 }
 ```
 
-### 步骤 4：memo 图表组件
+## 优化前后对比
 
-```jsx
-const DataChart = memo(function DataChart({ data, dateRange }) {
-  // 图表渲染成本高，只有数据真正变化时才重渲染
-  return (
-    <div className="chart-container">
-      {/* 图表渲染逻辑 */}
-    </div>
-  );
-});
+```
+                优化前      优化后      改善
+INP             500ms       80ms        -84%
+排序操作        280ms       20ms        -93%（Worker）
+渲染列表        200ms       10ms        -95%（虚拟滚动）
+搜索输入        150ms       30ms        -80%（startTransition）
+```
 
-// 父组件传递数据时用 useMemo
-function ChartSection() {
-  const rawData = useData();
+## 关键优化技术
 
-  const chartData = useMemo(() => {
-    return rawData.map(item => ({
-      date: item.date,
-      value: item.amount,
-    }));
-  }, [rawData]);
+### 1. Web Worker
 
-  return <DataChart data={chartData} />;
+```typescript
+// sort.worker.ts
+self.onmessage = (e) => {
+  const { data, key } = e.data
+  const sorted = [...data].sort((a, b) => {
+    if (typeof a[key] === 'number') return a[key] - b[key]
+    return String(a[key]).localeCompare(String(b[key]))
+  })
+  self.postMessage(sorted)
 }
 ```
 
-### 步骤 5：筛选逻辑优化
+### 2. 虚拟滚动
 
-```jsx
-function useFilteredData() {
-  const rawData = useData();
-  const filters = useFilters();
+只渲染可见区域的 DOM 节点。10000 条数据只渲染 20 个 DOM 节点。
 
-  // useMemo 缓存筛选结果
-  const filteredData = useMemo(() => {
-    let result = rawData;
+### 3. startTransition
 
-    if (filters.category !== 'all') {
-      result = result.filter(item => item.category === filters.category);
-    }
+React 18 的并发特性：将更新标记为"非紧急"，浏览器可以中断渲染来处理用户输入。
 
-    if (filters.status !== 'all') {
-      result = result.filter(item => item.status === filters.status);
-    }
+## 你可能踩的坑
 
-    if (filters.dateRange.start) {
-      result = result.filter(item => item.date >= filters.dateRange.start);
-    }
+**坑一：Worker 序列化成本**
 
-    if (filters.dateRange.end) {
-      result = result.filter(item => item.date <= filters.dateRange.end);
-    }
+传给 Worker 的数据需要序列化。如果数据很大，序列化本身就很慢。用 Transferable Objects。
 
-    return result;
-  }, [rawData, filters]);
+**坑二：虚拟滚动的动态高度**
 
-  return filteredData;
-}
-```
+如果每行高度不同，需要预估高度。估算不准会导致滚动跳动。
 
-### 步骤 6：Server Components 优化
+**坑三：startTransition 的使用场景**
 
-```jsx
-// 统计卡片：数据不常变化，用 Server Component + 缓存
-async function StatsCards() {
-  const stats = await fetch('/api/stats', {
-    next: { revalidate: 300 }  // 5 分钟缓存
-  });
+startTransition 只适用于非紧急更新。如果更新是用户直接感知的（如输入框文字），不要用。
 
-  return (
-    <div className="stats-grid">
-      <StatCard title="Total Revenue" value={stats.revenue} />
-      <StatCard title="Orders" value={stats.orders} />
-      <StatCard title="Customers" value={stats.customers} />
-      <StatCard title="Conversion" value={stats.conversion} />
-    </div>
-  );
+## 练习
+
+### 练习一：Web Worker 排序
+
+实现一个 Web Worker 排序功能：主线程发送数据和排序键，Worker 排序后返回结果。
+
+### 练习二：虚拟列表
+
+用 @tanstack/react-virtual 实现一个虚拟列表，渲染 10000 条数据，滚动流畅。
+
+---
+
+## 参考答案
+
+### 练习一
+
+```typescript
+// main.ts
+const worker = new Worker(new URL('./sort.worker.ts', import.meta.type))
+
+function sortAsync(data: any[], key: string): Promise<any[]> {
+  return new Promise((resolve) => {
+    worker.onmessage = (e) => resolve(e.data)
+    worker.postMessage({ data, key })
+  })
 }
 
-// 表格和筛选：需要交互，用 Client Component
-'use client';
-function DataTableSection() {
-  // 交互逻辑...
-}
+// 使用
+const sorted = await sortAsync(products, 'price')
 ```
 
----
+### 练习二
 
-## 四、优化效果
-
+```typescript
+const virtualizer = useVirtualizer({
+  count: 10000,
+  getScrollElement: () => parentRef.current,
+  estimateSize: () => 40,
+  overscan: 5 // 多渲染 5 个缓冲项
+})
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    优化前后对比                               │
-├─────────────────────┬───────────┬───────────┬────────────────┤
-│ 操作                 │ 优化前     │ 优化后     │ 改善           │
-├─────────────────────┼───────────┼───────────┼────────────────┤
-│ 搜索输入（每个字符） │ 350ms     │ < 16ms    │ ↓ 95%          │
-│ 切换筛选条件         │ 500ms     │ 50ms      │ ↓ 90%          │
-│ 排序                 │ 800ms     │ 100ms     │ ↓ 87%          │
-│ 滚动表格             │ 掉帧      │ 流畅      │ ✓              │
-│ 渲染组件数           │ 50+       │ 5-8       │ ↓ 85%          │
-│ 图表重渲染           │ 每次筛选   │ 仅数据变化 │ ↓ 90%          │
-└─────────────────────┴───────────┴───────────┴────────────────┘
-```
-
----
-
-## 五、优化总结
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    优化手段 → 解决的问题                      │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  状态下沉 → 隔离渲染范围                                      │
-│  ├─ 搜索状态独立 → 输入不影响表格和图表                       │
-│  ├─ 筛选状态独立 → 筛选不影响 Header                         │
-│                                                              │
-│  防抖 → 减少无效计算                                          │
-│  ├─ 搜索 300ms 防抖 → 减少 90% 的过滤操作                    │
-│                                                              │
-│  虚拟滚动 → 减少 DOM 节点                                     │
-│  ├─ 1000 行只渲染 15 行 → DOM 节点减少 98%                   │
-│                                                              │
-│  memo + useMemo → 避免不必要渲染                              │
-│  ├─ 图表组件 memo → 筛选时图表不重渲染                        │
-│  ├─ 排序结果 useMemo → 避免重复排序                           │
-│                                                              │
-│  Server Components → 减少客户端 JS                            │
-│  ├─ 统计卡片服务端渲染 → 0 客户端 JS                         │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 常见误区
-
-1. **只优化表格渲染不优化筛选逻辑**：虚拟滚动解决了 DOM 节点多的问题，但如果筛选逻辑本身是 O(n²) 的复杂度，1000 条数据的筛选仍然会卡。筛选结果要用 useMemo 缓存。
-2. **给所有组件都加 memo**：不是所有组件都需要 memo。只有渲染成本高且经常被父组件带动渲染的组件才值得加 memo。简单组件加 memo 反而增加比较成本。
-3. **防抖时间设太长**：搜索防抖 300ms 是经验值，设成 1000ms 会让用户觉得搜索"不响应"。设成 100ms 又起不到减少计算的效果。300ms 是平衡点。
-4. **忽视 Server Components 的价值**：Dashboard 中的统计卡片、用户信息等不常变化的部分，完全可以用 Server Component 服务端渲染，减少客户端 JS 体积和水合时间。
-
-## 工程建议
-
-1. **状态下沉是第一优先级**：在加 memo/useMemo 之前，先把状态放到使用它的最低层级组件。这一步通常能解决 80% 的不必要渲染。
-2. **搜索输入用 debounce + useMemo 双保险**：debounce 减少触发频率，useMemo 缓存筛选结果。两者配合才能保证搜索流畅。
-3. **大表格必须用虚拟滚动**：1000 行以上的表格，即使每行都用 memo，渲染成本仍然很高。虚拟滚动把 DOM 节点从 1000 个降到 15 个。
-4. **用 Profiler 的 Flamegraph 和 Ranked 视图**：Flamegraph 看渲染调用栈，Ranked 视图看哪些组件渲染耗时最长。两种视角结合才能全面诊断。
-
-## 动手挑战
-
-### 挑战一：独立诊断
-
-1. 拿到 Dashboard 代码后，独立用 Profiler 诊断
-2. 列出所有性能问题
-3. 制定优化方案并实施
-
-### 挑战二：进一步优化
-
-1. 把排序操作移到 Web Worker
-2. 实现表格列的拖拽排序
-3. 添加数据导出功能（避免阻塞主线程）
-
-### 挑战三：监控集成
-
-1. 添加 Web Vitals 监控
-2. 追踪搜索、筛选、排序的响应时间
-3. 建立性能基准测试
-
----
-
-## 小结
-
-1. **先诊断**：用 Profiler 找到真正的瓶颈
-2. **状态下沉**：把状态放到需要它的最低层级
-3. **防抖**：搜索、筛选等用户输入需要防抖
-4. **虚拟滚动**：大列表必须用虚拟滚动
-5. **memo**：昂贵组件用 memo，配合 useMemo/useCallback
-6. **Server Components**：不需要交互的部分用服务端渲染
-
----
-
-## 阶段回顾
-
-第三阶段你学到了：
-
-- React 渲染机制和触发原因
-- 状态设计如何影响渲染范围
-- memo、useMemo、useCallback 的正确使用
-- 大列表的虚拟滚动方案
-- Next.js 图片、字体、路由和缓存优化
-- Server Components 的性能优势
-
-**下一步**：进入第四阶段，学习资源、缓存与网络优化。

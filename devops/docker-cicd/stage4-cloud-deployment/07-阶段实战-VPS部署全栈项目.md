@@ -1,183 +1,202 @@
-# 第七课：阶段实战——VPS 部署全栈项目
+# 阶段实战：VPS 部署全栈项目
 
-> **课程定位**：综合运用第四阶段所有知识，完成 VPS 部署
-> **前置知识**：VPS、Nginx、HTTPS、数据库（第 1-6 课）
-> **预计时长**：90 分钟
+> 前置知识：VPS、Nginx、HTTPS、数据库迁移、备份（第 1-6 课）
 
----
+## 你的任务
 
-## 场景引入
+把一个全栈项目部署到 VPS 上，要求：
 
-经过前六课的学习，你已经掌握了 VPS 配置、反向代理、HTTPS、数据库迁移和备份。现在是时候把它们串成一个完整的部署方案了：你有一个全栈项目（Next.js 前端 + Express API + PostgreSQL + Redis），需要部署到 VPS 上，配置域名和 HTTPS，设置自动备份，并且能通过 CI/CD 自动部署。这是第四阶段的终极挑战。
+- 域名 + HTTPS
+- Nginx 反向代理
+- Docker Compose 编排所有服务
+- 数据库自动备份
+- CI/CD 自动部署
 
----
+这不是 demo——这是你在真实项目里交给运维团队的东西。
 
-## 学习目标
-
-完成本课后，你将拥有一个部署在 VPS 上的全栈项目，具备：
-
-1. 域名和 HTTPS
-2. Nginx 反向代理
-3. 数据库自动备份
-4. 完整的部署文档
-
----
-
-## 一、服务器准备
+## 服务器准备
 
 ```bash
-# 1. 连接服务器
-ssh deploy@your-server-ip
+# 连接服务器
+ssh root@your-server-ip
 
-# 2. 创建项目目录
-sudo mkdir -p /opt/my-app
-sudo chown deploy:deploy /opt/my-app
+# 创建部署用户
+adduser deploy
+usermod -aG docker deploy
 
-# 3. 克隆代码
-cd /opt/my-app
-git clone https://github.com/yourusername/yourrepo.git .
-
-# 4. 配置环境变量
-cp .env.example .env
-vim .env  # 填入实际配置
+# 创建项目目录
+mkdir -p /opt/myapp
+chown deploy:deploy /opt/myapp
 ```
 
----
-
-## 二、docker-compose.prod.yml
+## docker-compose.yml
 
 ```yaml
 services:
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    environment:
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://redis:6379
-      NODE_ENV: production
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  postgres:
-    image: postgres:14-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - app-network
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - app-network
-
   nginx:
-    image: nginx:1.25-alpine
+    image: nginx:alpine
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
+      - certbot-etc:/etc/letsencrypt:ro
+      - certbot-var:/var/lib/letsencrypt
     depends_on:
-      - app
+      - api
+      - frontend
     restart: unless-stopped
-    networks:
-      - app-network
 
-  backup:
-    image: alpine
-    command: >
-      sh -c "
-        apk add --no-cache docker-cli gzip &&
-        echo '0 2 * * * /scripts/backup-db.sh' > /etc/crontabs/root &&
-        crond -f -l 8
-      "
+  frontend:
+    image: ghcr.io/your-org/your-repo-frontend:${TAG:-latest}
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/your-org/your-repo-api:${TAG:-latest}
+    environment:
+      DATABASE_URL: postgres://postgres:${DB_PASSWORD}@db:5432/myapp
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      retries: 3
+
+  db:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./scripts:/scripts
-      - /opt/backups:/backups
-      - /var/run/docker.sock:/var/run/docker.sock
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 5
     restart: unless-stopped
-    networks:
-      - app-network
 
-networks:
-  app-network:
-    driver: bridge
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do sleep 12h & wait $${!}; certbot renew; done'"
 
 volumes:
   pgdata:
   redis-data:
+  certbot-etc:
+  certbot-var:
 ```
 
----
-
-## 三、Nginx 配置
+## Nginx 配置
 
 ```nginx
 # nginx/conf.d/default.conf
-upstream app {
-    server app:3000;
-}
-
 server {
     listen 80;
-    server_name my-app.com;
-    return 301 https://$server_name$request_uri;
+    server_name yourdomain.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {
-    listen 443 ssl http2;
-    server_name my-app.com;
+    listen 443 ssl;
+    server_name yourdomain.com;
 
-    ssl_certificate /etc/nginx/ssl/fullchain.pem;
-    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
 
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-
-    location / {
-        proxy_pass http://app;
+    location /api/ {
+        proxy_pass http://api:3000/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        proxy_pass http://frontend:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
     }
 }
 ```
 
----
+## HTTPS 证书
 
-## 四、部署脚本
+```bash
+# 首次申请证书
+docker compose run --rm certbot certonly \
+  --webroot \
+  --webroot-path=/var/lib/letsencrypt \
+  --email your@email.com \
+  --agree-tos \
+  --no-eff-email \
+  -d yourdomain.com
+
+# 重启 nginx 加载证书
+docker compose restart nginx
+```
+
+证书 90 天过期。certbot 容器会自动每 12 小时检查一次，过期前 30 天自动续期。
+
+## 数据库备份脚本
+
+```bash
+#!/bin/bash
+# scripts/backup-db.sh
+
+BACKUP_DIR="/opt/myapp/backups"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+BACKUP_FILE="$BACKUP_DIR/db_$TIMESTAMP.sql.gz"
+
+mkdir -p $BACKUP_DIR
+
+docker compose exec -T db pg_dump -U postgres myapp | gzip > $BACKUP_FILE
+
+# 保留最近 7 天的备份
+find $BACKUP_DIR -name "db_*.sql.gz" -mtime +7 -delete
+
+echo "Backup completed: $BACKUP_FILE"
+```
+
+```bash
+# 添加定时任务
+crontab -e
+# 每天凌晨 3 点备份
+0 3 * * * /opt/myapp/scripts/backup-db.sh >> /var/log/db-backup.log 2>&1
+```
+
+## 恢复数据库
+
+```bash
+# 从备份恢复
+gunzip < /opt/myapp/backups/db_20240101_030000.sql.gz | \
+  docker compose exec -T db psql -U postgres myapp
+```
+
+## 自动部署脚本
 
 ```bash
 #!/bin/bash
@@ -185,137 +204,140 @@ server {
 
 set -e
 
-echo "Starting deployment..."
+TAG=${1:-latest}
 
-# 拉取最新代码
-git pull origin main
+echo "Deploying version: $TAG"
 
-# 构建镜像
-docker compose -f docker-compose.prod.yml build
+# 拉取新镜像
+TAG=$TAG docker compose pull
 
-# 运行迁移
-docker compose -f docker-compose.prod.yml run --rm app npx prisma migrate deploy
+# 滚动更新
+TAG=$TAG docker compose up -d --remove-orphans
 
-# 重启服务
-docker compose -f docker-compose.prod.yml up -d
-
-# 健康检查
-echo "Waiting for health check..."
+# 等待健康检查通过
+echo "Waiting for services to be healthy..."
 sleep 10
-curl -f https://my-app.com/health || exit 1
 
-echo "Deployment completed!"
+# 验证
+curl -f http://localhost/api/health || {
+  echo "Health check failed, rolling back..."
+  docker compose rollback  # 需要 docker compose v2.20+
+  exit 1
+}
+
+echo "Deploy completed successfully"
 ```
+
+## 验收清单
+
+```bash
+# 1. 域名解析
+dig yourdomain.com          # 指向服务器 IP
+
+# 2. HTTPS
+curl -I https://yourdomain.com  # 200 OK
+
+# 3. API 健康检查
+curl https://yourdomain.com/api/health  # {"status":"ok"}
+
+# 4. 数据库
+docker compose exec db psql -U postgres myapp -c "\dt"  # 有表
+
+# 5. 备份
+/opt/myapp/scripts/backup-db.sh
+ls /opt/myapp/backups/  # 有备份文件
+
+# 6. 自动重启
+docker compose kill api
+docker compose ps  # api 自动重启
+```
+
+## 练习
+
+### 练习一：日志收集
+
+配置 Docker 的日志驱动，把所有容器的日志写入 `/var/log/myapp/` 目录。配置 logrotate 每天轮转，保留 7 天。
+
+### 练习二：监控脚本
+
+写一个 `scripts/monitor.sh`，每 5 分钟检查一次所有服务的健康状态。如果有服务不健康，发送通知（可以用 curl 调用 Slack Webhook 或企业微信机器人）。
+
+### 练习三：零停机部署
+
+修改部署脚本，实现零停机部署：先启动新版本容器，验证健康检查通过后，再停止旧版本容器。提示：用 Docker Compose 的 `--no-deps` 和 `--scale`。
 
 ---
 
-## 五、CI/CD 集成
+## 参考答案
+
+### 练习一
+
+在 docker-compose.yml 中配置日志驱动：
 
 ```yaml
-# .github/workflows/deploy.yml
-name: Deploy
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /opt/my-app
-            bash scripts/deploy.sh
+services:
+  api:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 ```
 
----
-
-## 六、验收清单
+logrotate 配置 `/etc/logrotate.d/myapp`：
 
 ```
-阶段四验收标准：
-
-  ✅ 域名可访问
-     https://my-app.com 可以正常访问
-
-  ✅ HTTPS 正常
-     浏览器显示安全锁图标
-
-  ✅ API 健康检查通过
-     curl https://my-app.com/health
-
-  ✅ 数据库可备份和恢复
-     运行备份脚本，测试恢复
+/var/log/myapp/*.log {
+    daily
+    missingok
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0644 root root
+}
 ```
 
----
+### 练习二
 
-## 七、部署文档
+```bash
+#!/bin/bash
+# scripts/monitor.sh
 
-```markdown
-# 部署文档
+SERVICES=("api" "frontend" "db" "redis")
+WEBHOOK_URL="https://hooks.slack.com/services/..."
 
-## 服务器信息
-- IP: xxx.xxx.xxx.xxx
-- OS: Ubuntu 22.04
-- 用户: deploy
-
-## 部署步骤
-1. SSH 连接服务器
-2. cd /opt/my-app
-3. bash scripts/deploy.sh
-
-## 回滚步骤
-1. bash scripts/rollback.sh <version>
-
-## 备份
-- 自动备份：每天凌晨 2 点
-- 备份位置：/opt/backups/postgres/
-- 保留时间：7 天
-
-## 故障排查
-- 查看日志：docker compose logs -f
-- 检查状态：docker compose ps
-- 重启服务：docker compose restart
+for service in "${SERVICES[@]}"; do
+  status=$(docker compose ps --format json $service | jq -r '.State')
+  if [ "$status" != "running" ]; then
+    curl -X POST $WEBHOOK_URL \
+      -H 'Content-Type: application/json' \
+      -d "{\"text\":\"⚠️ Service $service is $status on $(hostname)\"}"
+  fi
+done
 ```
 
----
+### 练习三
 
-## 常见误区
+```bash
+#!/bin/bash
+# scripts/deploy-zero-downtime.sh
 
-- **"部署完就不管了"**：部署只是开始。需要监控服务状态、检查日志、定期更新系统补丁、测试备份恢复。没有运维的部署是定时炸弹。
-- **"生产环境和开发环境用同一个 compose.yml"**：生产环境需要额外的配置（HTTPS、备份、资源限制、日志收集），用 `compose.prod.yml` 覆盖基础配置更安全。
-- **"部署脚本不需要错误处理"**：`set -e` 让脚本在任何命令失败时立即停止。没有错误处理的部署脚本可能在中间步骤失败后继续执行，导致更严重的问题。
-- **"服务器配置够用就行，不用监控"**：不监控就不知道什么时候磁盘会满、内存会爆、CPU 会飙。至少配置基本的资源监控和告警。
+set -e
+TAG=${1:-latest}
 
----
+# 拉取新镜像
+TAG=$TAG docker compose pull api
 
-## 工程建议
+# 启动新版本（不停旧版本）
+TAG=$TAG docker compose up -d --no-deps --scale api=2 api
 
-- **写一份部署文档**：包括服务器信息、部署步骤、回滚步骤、备份策略、故障排查。新人或未来的你能根据文档独立操作。
-- **用 `docker compose -f` 区分环境**：`compose.yml`（基础）+ `compose.prod.yml`（生产覆盖），生产部署用 `docker compose -f compose.yml -f compose.prod.yml up -d`。
-- **部署后自动健康检查**：`curl -f https://my-app.com/health` 验证服务正常。失败时自动回滚，不要等用户反馈。
-- **把服务器初始化写成脚本**：`scripts/init-server.sh` 包含用户创建、Docker 安装、防火墙配置等。新服务器一条脚本搞定。
+# 等待新容器健康
+sleep 15
+NEW_CONTAINER=$(docker compose ps api --format json | jq -s 'sort_by(.CreatedAt) | last | .Name')
 
----
+# 停止旧容器
+docker compose up -d --no-deps --scale api=1 api
 
-## 小结
-
-本课综合运用了第四阶段的所有知识：
-
-1. **VPS 配置**：系统初始化、Docker 安装、安全配置
-2. **Nginx 反向代理**：HTTPS、多服务路由
-3. **域名和证书**：DNS 配置、Let's Encrypt 证书
-4. **数据库**：迁移、备份、恢复
-5. **部署脚本**：自动化部署流程
-6. **CI/CD 集成**：GitHub Actions 自动部署
-
-你现在已经拥有一个部署在 VPS 上的全栈项目。下一阶段我们将学习生产稳定性——健康检查、监控、回滚等。
+echo "Zero-downtime deploy completed"
+```

@@ -1,21 +1,12 @@
 # API 集成测试
 
-## 场景引入
+## 从一个线上 bug 说起
 
-你写了一个用户注册接口，单元测试覆盖了密码加密和邮箱校验，上线后却发现：用户注册成功了，但数据库里存了两条重复记录。原因是单元测试只验证了单个函数的输入输出，没有测试「请求 → 中间件 → 路由 → 数据库」这条完整链路。
+你写了一个用户注册接口，单元测试覆盖了密码加密和邮箱校验。上线后发现：用户注册成功了，但数据库里存了两条重复记录。
 
-集成测试验证的是**模块之间的契约**——当真实数据库、真实服务器参与时，系统行为是否符合预期。
+原因是单元测试只验证了单个函数的输入输出，没有测试「请求 → 中间件 → 路由 → 数据库」这条完整链路。集成测试验证的就是模块之间的契约。
 
-## 学习目标
-
-- 理解集成测试与单元测试的边界
-- 使用 Supertest 测试 Express API
-- 掌握事务回滚策略保持测试隔离
-- 学会独立测试中间件
-
----
-
-## 使用 Supertest 测试 API
+## Supertest：不用启动服务器就能测 API
 
 ```typescript
 // src/app.ts
@@ -56,6 +47,8 @@ userRouter.post('/', async (req, res) => {
 })
 ```
 
+测试：
+
 ```typescript
 // tests/user.integration.test.ts
 import request from 'supertest'
@@ -63,13 +56,6 @@ import { app } from '../src/app'
 import { db } from '../src/db'
 
 afterAll(async () => { await db.end() })
-
-describe('GET /api/users', () => {
-  it('应返回用户列表', async () => {
-    const res = await request(app).get('/api/users').expect(200)
-    expect(Array.isArray(res.body.data)).toBe(true)
-  })
-})
 
 describe('POST /api/users', () => {
   it('缺少必填字段时返回 400', async () => {
@@ -93,11 +79,11 @@ describe('POST /api/users', () => {
 })
 ```
 
----
+关键点：Supertest 直接传 app 实例，不需要真正监听端口。
 
-## 事务回滚策略
+## 事务回滚：测试隔离的核心策略
 
-每次测试在同一个连接上开启事务，结束后回滚，确保测试隔离且不产生脏数据。
+每个测试在同一连接上开启事务，结束后回滚，确保不产生脏数据：
 
 ```typescript
 // tests/setup.ts
@@ -146,7 +132,9 @@ describe('POST /api/users - 数据库验证', () => {
 })
 ```
 
-### Testcontainers 化测试数据库
+`beforeEach` + 事务回滚比 `afterEach` 清理更快更可靠。
+
+## Testcontainers：CI 中的数据库
 
 ```typescript
 // tests/global-setup.ts
@@ -167,26 +155,9 @@ export default async function globalSetup() {
 }
 ```
 
----
+CI 中不需要预装数据库，Testcontainers 按需创建 Docker 容器。
 
-## 测试中间件
-
-```typescript
-// src/middleware/auth.ts
-import { Request, Response, NextFunction } from 'express'
-import jwt from 'jsonwebtoken'
-
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const token = req.headers.authorization?.replace('Bearer ', '')
-  if (!token) return res.status(401).json({ error: '未提供认证令牌' })
-  try {
-    (req as any).user = jwt.verify(token, process.env.JWT_SECRET!)
-    next()
-  } catch {
-    return res.status(401).json({ error: '认证令牌无效' })
-  }
-}
-```
+## 中间件独立测试
 
 ```typescript
 // tests/auth-middleware.test.ts
@@ -210,12 +181,6 @@ describe('authMiddleware', () => {
     expect(next).not.toHaveBeenCalled()
   })
 
-  it('无效 token 返回 401', () => {
-    const { req, res, next } = mockReqRes('Bearer bad-token')
-    authMiddleware(req, res, next)
-    expect(res.status).toHaveBeenCalledWith(401)
-  })
-
   it('有效 token 调用 next', () => {
     const token = jwt.sign({ userId: 1 }, SECRET)
     const { req, res, next } = mockReqRes(`Bearer ${token}`)
@@ -226,45 +191,18 @@ describe('authMiddleware', () => {
 })
 ```
 
----
-
-## 常见误区
-
-1. **把数据库操作当单元测试**：直接在单元测试里调数据库，变慢且难隔离。集成测试用独立数据库 + 事务回滚。
-2. **测试之间有顺序依赖**：测试 A 插入的数据被测试 B 依赖。每个测试应自给自足。
-3. **不清理外部资源**：测试创建文件、调第三方 API 但没清理或 mock。
-4. **全用真实数据库跑 CI**：考虑 Testcontainers 按需创建，或 SQLite 内存库替代。
-
----
-
-## 工程建议
-
-- 测试数据库和开发库完全隔离，CI 中用 Testcontainers
-- `beforeEach` + 事务回滚比 `afterEach` 清理更快更可靠
-- Supertest 直接传 app 实例，不需要真正监听端口
-- `.env.test` 单独配置，避免误连生产库
-- 集成测试放 `tests/integration/`，和单元测试分开
-
----
-
-## 小结
-
-- 集成测试验证模块协作，弥补单元测试覆盖不到的交互
-- Supertest 无需启动真实服务器即可测试 HTTP 接口
-- 事务回滚确保测试隔离，不产生脏数据
-- 中间件可独立测试，不依赖完整应用
-
----
-
 ## 练习
 
 ### 练习一：查询接口测试
+
 为 `GET /api/users/:id` 编写测试：用户存在返回 200，不存在返回 404。
 
 ### 练习二：事务回滚验证
+
 在一个测试中插入数据，在下一个测试中查询同一数据，确认不存在。
 
 ### 练习三：认证集成测试
+
 为 `GET /api/profile` 编写测试：无 token 返回 401，有效 token 返回用户信息。
 
 ---
@@ -284,7 +222,6 @@ describe('GET /api/users/:id', () => {
 
   it('用户不存在返回 404', async () => {
     const res = await request(app).get('/api/users/99999').expect(404)
-    expect(res.body.error).toBe('用户不存在')
   })
 })
 ```
@@ -297,11 +234,14 @@ describe('事务回滚验证', () => {
   afterEach(rollbackTransaction)
 
   it('测试1：插入数据', async () => {
-    await request(app).post('/api/users').send({ name: '临时', email: 'temp@test.com' }).expect(201)
+    await request(app).post('/api/users')
+      .send({ name: '临时', email: 'temp@test.com' }).expect(201)
   })
 
   it('测试2：数据应不存在', async () => {
-    const result = await getTestDb().query('SELECT * FROM users WHERE email = $1', ['temp@test.com'])
+    const result = await getTestDb().query(
+      'SELECT * FROM users WHERE email = $1', ['temp@test.com']
+    )
     expect(result.rows.length).toBe(0)
   })
 })

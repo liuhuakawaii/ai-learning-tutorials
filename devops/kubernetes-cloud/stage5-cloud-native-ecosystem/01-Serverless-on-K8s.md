@@ -1,290 +1,148 @@
 # Serverless on K8s
 
-## 场景引入
+> 前置知识：Deployment、Service、HPA（Stage 1-2）
 
-你的团队有一个图片处理服务，平时几乎没流量，但每天凌晨批量处理时会突发大量请求。按固定副本数部署，白天资源浪费，凌晨又不够用。你想要一种方案：没流量时缩到 0 个 Pod，有请求时自动启动，用完再缩回 0。
+## 一个资源浪费的场景
 
-这就是 Serverless 的核心理念——你不用关心"服务器"，只关心代码。Knative 是 K8s 上最成熟的 Serverless 平台，它在 K8s 之上提供了自动扩缩容（包括缩容到 0）和事件驱动能力。
+你的团队有一个图片处理服务。平时几乎没流量，但每天凌晨批量处理时会突发大量请求。
 
-## 学习目标
+按固定副本数部署？白天 3 个 Pod 空转，浪费资源。只部署 1 个？凌晨扛不住流量。
 
-1. 理解 Serverless 在 K8s 上的定位和价值
-2. 掌握 Knative Serving 的核心概念
-3. 学会配置自动扩缩容（包括缩容到 0）
-4. 了解 Knative Eventing 的基本用法
-5. 理解 Serverless 的适用场景和局限性
+你想要一种方案：没流量时缩到 0 个 Pod，有请求时自动启动，用完再缩回 0。
+
+这就是 Serverless 的核心理念——你不用关心"服务器"，只关心代码。Knative 是 K8s 上最成熟的 Serverless 平台。
 
 ## Knative 架构
 
 Knative 由两个核心组件组成：
 
-- **Serving**：请求驱动的工作负载，支持自动扩缩容到 0
-- **Eventing**：事件驱动的工作负载，支持事件的生产和消费
-
 ```
-┌─────────────────────────────────────────┐
-│                Knative                   │
-│                                          │
-│  ┌──────────────┐    ┌──────────────┐   │
-│  │  Serving     │    │  Eventing    │   │
-│  │  - Service   │    │  - Broker    │   │
-│  │  - Route     │    │  - Trigger   │   │
-│  │  - Revision  │    │  - Channel   │   │
-│  └──────┬───────┘    └──────────────┘   │
-│         │                                │
-│  ┌──────▼──────────────────────────────┐│
-│  │          Kubernetes                  ││
-│  └─────────────────────────────────────┘│
-└─────────────────────────────────────────┘
-```
+Knative Serving：请求驱动的自动扩缩容
+  ├── 缩容到 0（没有请求时 Pod 被完全移除）
+  ├── 按请求数扩缩容（不是按 CPU/内存）
+  └── 流量切分（金丝雀发布）
 
-## 安装 Knative
-
-### 安装 Serving
-
-```bash
-# 安装 Knative Serving CRD
-kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
-
-# 安装 Knative Serving 核心组件
-kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml
-
-# 安装网络层（Kourier，轻量级 Ingress）
-kubectl apply -f https://github.com/knative/net-kourier/releases/latest/download/kourier.yaml
-
-# 配置 Knative 使用 Kourier
-kubectl patch configmap/config-network \
-  --namespace knative-serving \
-  --type merge \
-  --patch '{"data":{"ingress-class":"kourier.ingress.networking.knative.dev"}}'
-
-# 验证安装
-kubectl get pods -n knative-serving
-```
-
-### 安装 Eventing
-
-```bash
-# 安装 Knative Eventing CRD
-kubectl apply -f https://github.com/knative/eventing/releases/latest/download/eventing-crds.yaml
-
-# 安装 Knative Eventing 核心组件
-kubectl apply -f https://github.com/knative/eventing/releases/latest/download/eventing-core.yaml
-
-# 安装 In-Memory Channel（开发用）
-kubectl apply -f https://github.com/knative/eventing/releases/latest/download/in-memory-channel.yaml
+Knative Eventing：事件驱动
+  ├── 事件源（Kafka、GitHub、定时器等）
+  ├── 事件路由（Channel、Subscription）
+  └── 事件处理（Broker、Trigger）
 ```
 
 ## Knative Serving 核心概念
 
-### Knative Service
-
-Knative Service 是最上层的抽象，它自动管理 Route 和 Revision。
-
 ```yaml
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: hello
+  name: image-processor
 spec:
   template:
     metadata:
       annotations:
-        autoscaling.knative.dev/minScale: "0"
-        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/min-scale: "0"    # 没流量时缩到 0
+        autoscaling.knative.dev/max-scale: "10"   # 最多 10 个 Pod
+        autoscaling.knative.dev/target: "5"       # 每个 Pod 处理 5 个并发请求
     spec:
       containers:
-        - image: gcr.io/knative-samples/helloworld-go
-          ports:
-            - containerPort: 8080
-          env:
-            - name: TARGET
-              value: "World"
+        - image: ghcr.io/myorg/image-processor:latest
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
 ```
 
-```bash
-# 创建 Service
-kubectl apply -f hello-service.yaml
+```
+请求来了 → Knative 检查有没有 Pod
+  ├── 有 Pod → 直接路由到 Pod
+  └── 没有 Pod（缩容到 0）→ 启动新 Pod → 路由
+      └── 启动时间：冷启动约 2-5 秒
+```
 
-# 查看 Service
+## 安装 Knative
+
+```bash
+# 安装 Knative Serving
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml
+
+# 安装网络层（Kourier）
+kubectl apply -f https://github.com/knative/net-kourier/releases/latest/download/kourier.yaml
+
+# 配置 DNS（使用 sslip.io，本地开发用）
+kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-default-domain.yaml
+
+# 验证
+kubectl get pods -n knative-serving
+```
+
+## 部署和测试
+
+```bash
+# 部署 Knative Service
+kubectl apply -f service.yaml
+
+# 查看
 kubectl get ksvc
-# NAME     URL                                           LATESTCREATED   LATESTREADY    READY
-# hello    http://hello.default.example.com              hello-00001     hello-00001    True
+# NAME               URL                                           READY
+# image-processor    http://image-processor.default.127.0.0.1.sslip.io   True
 
-# 访问 Service
-curl http://hello.default.example.com
+# 测试
+curl http://image-processor.default.127.0.0.1.sslip.io
+
+# 观察自动扩缩容
+kubectl get pods -w
+# 没有请求时：0 个 Pod
+# 发送请求后：1 个 Pod 启动
+# 持续发送：Pod 数量增加
+# 停止请求：Pod 逐步缩回 0
 ```
 
-### Revision
+## 冷启动问题
 
-每次修改 Knative Service 的 template，都会创建一个新的 Revision。
+缩容到 0 的代价是冷启动——第一个请求需要等 Pod 启动，延迟 2-5 秒。
 
-```bash
-# 查看所有 Revision
-kubectl get revisions
+```
+解决方案：
 
-# 回滚到指定 Revision
-kubectl apply -f - <<EOF
-apiVersion: serving.knative.dev/v1
-kind: Service
-metadata:
-  name: hello
-spec:
-  template:
-    metadata:
-      name: hello-00001    # 指定 Revision 名称
-    spec:
-      containers:
-        - image: gcr.io/knative-samples/helloworld-go
-EOF
+1. 设置 min-scale: "1"
+   └── 代价：始终有一个 Pod 在运行，有资源成本
+
+2. 使用 Init Container 预热
+   └── 在 Pod 启动时预加载模型、建立连接池
+
+3. 使用 Provisioned Concurrency（Knative 不原生支持，需要自定义）
+   └── 预先启动 N 个 Pod，但不接收流量，需要时立即切换
 ```
 
-### Route
+## Serverless 的适用场景
 
-Route 将流量分配到不同的 Revision。
-
-```yaml
-apiVersion: serving.knative.dev/v1
-kind: Route
-metadata:
-  name: hello
-spec:
-  traffic:
-    - revisionName: hello-00001
-      percent: 80
-    - revisionName: hello-00002
-      percent: 20
 ```
+适合：
+  ✓ 流量波动大的服务（白天忙晚上闲）
+  ✓ 事件驱动的任务（文件上传后处理、消息队列消费）
+  ✓ 批处理任务（定时执行，执行完就释放）
+  ✓ 开发/测试环境（不用时自动释放资源）
 
-## 自动扩缩容配置
-
-### 缩容到 0
-
-```yaml
-metadata:
-  annotations:
-    autoscaling.knative.dev/minScale: "0"     # 没流量时缩到 0
-    autoscaling.knative.dev/maxScale: "10"    # 最多 10 个 Pod
-    autoscaling.knative.dev/target: "100"     # 每个 Pod 处理 100 并发
+不适合：
+  ✗ 低延迟要求的服务（冷启动 2-5 秒不可接受）
+  ✗ 长时间运行的任务（有超时限制）
+  ✗ 有状态服务（Pod 随时可能被销毁）
+  ✗ 稳定流量的服务（不如固定副本数划算）
 ```
-
-缩容到 0 的工作原理：
-```
-1. 没有请求 → 等待窗口期（默认 30s）
-2. 窗口期过后 → 缩容到 0
-3. 新请求到达 → Activator 接管请求
-4. Knative 启动 Pod → 等待 Pod 就绪
-5. 将请求转发到 Pod → 用户感知到冷启动延迟
-```
-
-### 冷启动优化
-
-```yaml
-metadata:
-  annotations:
-    # 保留至少 1 个 Pod，避免冷启动
-    autoscaling.knative.dev/minScale: "1"
-    # 使用更小的容器加速启动
-    # 预热连接
-```
-
-冷启动的影响：
-- Java 应用可能需要 5-10 秒
-- Go/Python 应用通常 1-2 秒
-- 使用 `minScale: 1` 可以完全避免冷启动
-
-## Knative Eventing
-
-### 事件源（Event Source）
-
-```yaml
-# ApiServerSource：监听 K8s 事件
-apiVersion: sources.knative.dev/v1
-kind: ApiServerSource
-metadata:
-  name: k8s-events
-spec:
-  serviceAccountName: events-sa
-  mode: Resource
-  resources:
-    - apiVersion: v1
-      kind: Event
-  sink:
-    ref:
-      apiVersion: eventing.knative.dev/v1
-      kind: Broker
-      name: default
-```
-
-### Trigger（事件过滤）
-
-```yaml
-apiVersion: eventing.knative.dev/v1
-kind: Trigger
-metadata:
-  name: my-trigger
-spec:
-  broker: default
-  filter:
-    attributes:
-      type: dev.knative.apiserver.resource.add
-      kind: Pod
-  subscriber:
-    ref:
-      apiVersion: serving.knative.dev/v1
-      kind: Service
-      name: event-handler
-```
-
-## 适用场景
-
-| 场景 | 是否适合 Serverless |
-|------|-------------------|
-| 请求驱动的 API | 非常适合 |
-| 事件处理 | 非常适合 |
-| 定时任务 | 适合（结合 CronJob） |
-| 长时间运行的任务 | 不适合 |
-| WebSocket 长连接 | 不适合 |
-| 高并发低延迟 | 不太适合（冷启动） |
-
-## 常见误区
-
-**误区一："Serverless 就是不需要服务器"**
-
-Serverless 仍然运行在 K8s 上，只是你不用管理底层基础设施。Knative 帮你处理扩缩容和路由。
-
-**误区二："Serverless 比 Deployment 便宜"**
-
-低流量时确实更省钱（缩容到 0），但冷启动带来的延迟可能影响用户体验。需要根据实际流量模式选择。
-
-**误区三："所有应用都应该 Serverless"**
-
-有状态服务、长连接、低延迟要求的应用不适合 Serverless。
-
-## 工程建议
-
-1. **合理设置 minScale**：对延迟敏感的服务设置 `minScale: 1`
-2. **优化容器启动时间**：使用轻量级基础镜像，减少初始化逻辑
-3. **监控冷启动次数和延迟**
-4. **使用流量分割进行渐进式发布**
-
-## 小结
-
-- Knative 是 K8s 上最成熟的 Serverless 平台
-- Serving 提供请求驱动的自动扩缩容（含缩容到 0）
-- Eventing 提供事件驱动的编程模型
-- 适合请求驱动、低流量、突发流量的场景
-- 冷启动是 Serverless 的主要代价
 
 ## 练习
 
 ### 练习一：部署 Knative Service
 
-在本地集群安装 Knative Serving，并部署一个 hello-world 应用。
+部署一个简单的 HTTP 服务到 Knative。验证：没流量时 Pod 数量为 0，有请求时自动启动。
 
-### 练习二：扩缩容测试
+### 练习二：冷启动优化
 
-配置 Knative Service 的扩缩容参数，观察从 0 到 1 的冷启动过程。
+对比 `min-scale: "0"` 和 `min-scale: "1"` 的首次请求延迟。记录冷启动时间。
+
+### 练习三：流量切分
+
+部署两个版本的 Knative Service，配置流量切分：v1 承担 90%，v2 承担 10%。验证请求确实按比例分配。
 
 ---
 
@@ -292,56 +150,50 @@ Serverless 仍然运行在 K8s 上，只是你不用管理底层基础设施。K
 
 ### 练习一
 
-**答案**：
-
 ```bash
-# 安装 Knative Serving
-kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-crds.yaml
-kubectl apply -f https://github.com/knative/serving/releases/latest/download/serving-core.yaml
-kubectl apply -f https://github.com/knative/net-kourier/releases/latest/download/kourier.yaml
-
-# 创建 Service
-kubectl apply -f - <<EOF
-apiVersion: serving.knative.dev/v1
-kind: Service
-metadata:
-  name: hello
-spec:
-  template:
-    spec:
-      containers:
-        - image: gcr.io/knative-samples/helloworld-go
-          env:
-            - name: TARGET
-              value: "Knative"
-EOF
-
-# 验证
+kubectl apply -f service.yaml
 kubectl get ksvc
+kubectl get pods   # 0 个 Pod
+curl http://image-processor.default.127.0.0.1.sslip.io
+kubectl get pods   # 1 个 Pod 启动
+# 等待 5 分钟不发请求
+kubectl get pods   # 0 个 Pod（缩容到 0）
 ```
 
 ### 练习二
 
-**答案**：
-
 ```bash
-# 1. 配置 minScale: 0
-kubectl annotate ksvc hello autoscaling.knative.dev/minScale="0"
+# min-scale: "0" 的冷启动
+time curl http://service.default.127.0.0.1.sslip.io
+# 首次请求：2-5 秒（冷启动）
 
-# 2. 等待 Pod 缩容到 0
-kubectl get pods -w
-# 会看到 Pod 逐渐减少到 0
-
-# 3. 发送请求，观察冷启动
-time curl http://hello.default.example.com
-# 第一次请求会有冷启动延迟
-
-# 4. 查看 Pod 启动
-kubectl get pods -w
-# 会看到新 Pod 被创建
+# min-scale: "1" 的首次请求
+time curl http://service.default.127.0.0.1.sslip.io
+# 首次请求：< 1 秒（Pod 已在运行）
 ```
 
-**要点**：
-- 冷启动延迟取决于容器启动时间
-- Go 应用冷启动通常 1-2 秒
-- 设置 minScale: 1 可以避免冷启动
+### 练习三
+
+```yaml
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: my-app
+spec:
+  template:
+    spec:
+      containers:
+        - image: ghcr.io/myorg/my-app:v1
+---
+apiVersion: serving.knative.dev/v1
+kind: Revision
+metadata:
+  name: my-app-v2
+spec:
+  containers:
+    - image: ghcr.io/myorg/my-app:v2
+---
+# 在 Service 中配置流量分配
+# 通过 kubectl 命令：
+# kubectl ksvc update my-app --traffic @latest=90 --traffic my-app-v2=10
+```

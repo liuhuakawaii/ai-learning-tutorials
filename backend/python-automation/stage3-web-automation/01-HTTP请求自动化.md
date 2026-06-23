@@ -1,50 +1,31 @@
 # HTTP 请求自动化
 
-## 场景引入
+## 为什么需要封装 HTTP 请求
 
-你负责维护一个内部系统，需要每天定时调用第三方 API 拉取数据、同步到本地数据库。手动操作不仅枯燥，还容易遗漏。你需要一个脚本自动完成 HTTP 请求、处理认证、管理会话、应对网络异常。Python 的 `requests` 库是处理这些需求的标准工具。
+你负责维护一个内部系统，每天定时调用第三方 API 拉取数据同步到本地。手动操作枯燥且容易遗漏。你需要一个脚本自动完成 HTTP 请求、处理认证、管理会话、应对网络异常。
 
-## 学习目标
-
-- 掌握 `requests` 发送 GET/POST 请求及自定义 Headers 和 Cookies
-- 理解 Session 对象如何保持会话状态
-- 能实现 Basic、Bearer 等常见认证方式
-- 能设计限流、超时、重试机制
-- 能封装一个生产级 API 客户端
+Python 的 `requests` 库是处理这些需求的标准工具。但直接用 `requests.get()` 不够——生产环境需要超时、重试、限流、会话管理。
 
 ## requests 基础
-
-### GET 与 POST 请求
 
 ```python
 import requests
 
-# GET 请求
+# GET 请求，参数自动编码为查询字符串
 resp = requests.get("https://httpbin.org/get", params={"page": 1, "size": 10})
 print(resp.status_code, resp.json())
 
-# POST JSON
+# POST JSON，自动设置 Content-Type
 resp = requests.post("https://httpbin.org/post", json={"username": "admin"})
-
-# POST 表单
-resp = requests.post("https://httpbin.org/post", data={"field1": "value1"})
 
 # 上传文件
 with open("report.pdf", "rb") as f:
     resp = requests.post("https://httpbin.org/post", files={"file": f})
 ```
 
-`params` 自动编码为查询字符串；`json=` 自动设置 `Content-Type: application/json`。
-
-### 自定义 Headers 和 Cookies
-
-```python
-headers = {"User-Agent": "MyApp/1.0", "Accept": "application/json"}
-cookies = {"session_id": "abc123"}
-resp = requests.get(url, headers=headers, cookies=cookies)
-```
-
 ## Session 保持会话
+
+`Session` 自动管理 Cookie、连接池和默认 Headers，比每次调用 `requests.get()` 高效：
 
 ```python
 with requests.Session() as session:
@@ -53,7 +34,7 @@ with requests.Session() as session:
     resp = session.get("https://httpbin.org/get")
 ```
 
-`Session` 自动管理 Cookie、连接池和默认 Headers，比每次调用 `requests.get()` 更高效。
+连续请求同一站点时，Session 复用 TCP 连接，减少握手开销。
 
 ## 认证方式
 
@@ -76,32 +57,16 @@ resp = requests.post(token_url, data={
 token = resp.json()["access_token"]
 ```
 
-## 超时与限流
+## 超时与重试
+
+生产环境必须设置超时，否则脚本可能永久挂起：
 
 ```python
 # 超时：连接 5 秒，读取 10 秒
 resp = requests.get(url, timeout=(5, 10))
-
-# 令牌桶限流
-import time, threading
-
-class RateLimiter:
-    def __init__(self, calls_per_second: float):
-        self.interval = 1.0 / calls_per_second
-        self.lock = threading.Lock()
-        self.last_call = 0.0
-
-    def acquire(self):
-        with self.lock:
-            wait = self.interval - (time.monotonic() - self.last_call)
-            if wait > 0:
-                time.sleep(wait)
-            self.last_call = time.monotonic()
 ```
 
-`timeout` 不设置则永久等待，生产环境必须指定。
-
-## 错误处理与指数退避
+指数退避重试——避免在服务器过载时频繁重试：
 
 ```python
 import time
@@ -127,9 +92,32 @@ def safe_request(url: str, max_retries: int = 3) -> requests.Response:
     raise RuntimeError(f"请求失败，已重试 {max_retries} 次")
 ```
 
-指数退避 `2 ** attempt` 避免在服务器过载时频繁重试。
+`2 ** attempt` 产生 1s、2s、4s 的退避间隔。客户端错误（4xx）不重试，直接抛出。
 
-## 完整示例：带重试和限流的 API 客户端
+## 限流
+
+令牌桶限流——控制请求频率，避免触发 API 限速：
+
+```python
+import time, threading
+
+class RateLimiter:
+    def __init__(self, calls_per_second: float):
+        self.interval = 1.0 / calls_per_second
+        self.lock = threading.Lock()
+        self.last_call = 0.0
+
+    def acquire(self):
+        with self.lock:
+            wait = self.interval - (time.monotonic() - self.last_call)
+            if wait > 0:
+                time.sleep(wait)
+            self.last_call = time.monotonic()
+```
+
+## 完整 API 客户端
+
+集成 Session 连接池、自动重试、限流、超时和上下文管理器：
 
 ```python
 import time
@@ -189,58 +177,23 @@ if __name__ == "__main__":
         print(users)
 ```
 
-集成 Session 连接池、自动重试（指数退避）、令牌桶限流、超时控制和上下文管理器。
+`Retry` + `HTTPAdapter` 处理 5xx 自动重试；`_throttle` 用锁保证线程安全；上下文管理器确保连接释放。
 
-## 常见误区
+## 踩坑提醒
 
-### 1. 不设置超时
+**不设置超时**：`requests.get(url)` 无超时时永久等待，生产环境必须指定。
 
-```python
-# ❌ 永久等待，脚本挂起
-resp = requests.get(url)
-# ✅ 必须设置超时
-resp = requests.get(url, timeout=10)
-```
+**每次请求创建新连接**：用 Session 复用连接，减少 TCP 握手开销。
 
-### 2. 每次请求创建新连接
-
-```python
-# ❌ 每次新建 TCP 连接
-for url in urls:
-    requests.get(url)
-# ✅ 用 Session 复用连接
-session = requests.Session()
-for url in urls:
-    session.get(url)
-```
-
-### 3. 忽略 HTTP 错误状态码
-
-```python
-# ❌ 404/500 不会抛异常
-resp = requests.get(url)
-# ✅ 检查状态码
-resp.raise_for_status()
-```
-
-## 工程建议
-
-1. **始终设置超时**：生产环境用 `timeout=(5, 15)` 区分连接和读取超时
-2. **用 Session 复用连接**：减少 TCP 握手开销
-3. **敏感信息不硬编码**：Token 从环境变量读取
-4. **重试用指数退避**：`2 ** attempt` 秒间隔，避免雪崩
-
-## 小结
-
-本节学习了 requests 的 GET/POST 请求、Headers/Cookies 设置、Session 会话管理、多种认证方式、超时和限流机制。通过封装 APIClient 类，将这些能力整合为可复用的生产级客户端。
+**忽略 HTTP 错误状态码**：404/500 不会抛异常，必须调 `resp.raise_for_status()`。
 
 ## 练习
 
 ### 练习一：批量下载文件
 
-编写脚本，从 URL 列表批量下载文件，要求：使用 Session、设置超时、失败重试 3 次。
+从 URL 列表批量下载文件，要求：使用 Session、设置超时、失败重试 3 次。
 
-### 练习二：实现指数退避重试装饰器
+### 练习二：指数退避重试装饰器
 
 编写装饰器 `@retry_with_backoff(max_retries=3, base_delay=1)`，异常时自动重试，间隔指数增长。
 
@@ -249,10 +202,6 @@ resp.raise_for_status()
 ## 参考答案
 
 ### 练习一
-
-**思路**：用 Session 复用连接，流式下载，分块写入避免内存溢出。
-
-**答案**：
 
 ```python
 import requests
@@ -278,13 +227,9 @@ def download_files(urls: list[str], dest_dir: str) -> None:
     session.close()
 ```
 
-**要点**：`stream=True` 流式下载大文件；`iter_content` 分块写入。
+`stream=True` 流式下载大文件；`iter_content` 分块写入避免内存溢出。
 
 ### 练习二
-
-**思路**：用 `functools.wraps` 保留元信息，循环重试并指数增长延迟。
-
-**答案**：
 
 ```python
 import time
@@ -313,4 +258,4 @@ def fetch_data(url: str) -> dict:
     return resp.json()
 ```
 
-**要点**：`max_retries + 1` 次循环保证首次调用加重试次数正确。
+`max_retries + 1` 次循环保证首次调用加重试次数正确。
