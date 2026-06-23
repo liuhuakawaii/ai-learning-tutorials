@@ -1,395 +1,242 @@
-# 第 1 课：从单 Agent 到多 Agent——为什么需要多个 Agent 协作
+# 从单 Agent 到多 Agent
 
-> **课程定位**：理解多 Agent 系统的核心动机和设计思路
-> **前置知识**：02-ai-agent-engineer-course 的单 Agent 开发经验
-> **预计时长**：40 分钟
+> 前置知识：02-ai-agent-engineer-course 的单 Agent 开发经验
+> 预计时长：40 分钟
 
----
+## 一个真实的崩溃现场
 
-## 场景引入
+你接了一个需求：让 AI 帮用户做竞品分析。流程是搜索竞品信息 → 提取功能差异 → 生成对比报告。你把所有指令塞进一个 system prompt，加了 5 个工具，跑了几个测试 case 效果还行。
 
-当你接到一个需求：让 AI 同时完成"搜索资料、分析数据、撰写报告"三件事，你可能会把所有指令塞进一个超长 Prompt。但很快你会发现：模型开始"忘掉"前面的指令，分析和写作混在一起，输出质量越来越差。更麻烦的是，你想在"分析"之后加一个人工审核步骤，却发现单 Agent 架构根本无法插入这样的控制节点。
+上线后用户输入变了："帮我对比 Notion、Obsidian 和 Logseq，重点关注离线能力和插件生态"。
 
----
+结果：
+- Agent 先搜了 Notion，拿到一堆信息塞进上下文
+- 搜 Obsidian 时上下文已经很长，模型开始"忘掉" Notion 的细节
+- 搜 Logseq 时，Notion 的搜索结果被挤出了有效上下文窗口
+- 最后生成的报告里，Notion 的信息严重缺失，部分描述其实是 Logseq 的
 
-## 学习目标
+这不是 prompt 写得不好，而是单 Agent 架构的结构性问题。
 
-完成本课学习后，你将能够：
+## 单 Agent 的四个结构性瓶颈
 
-1. 说出单 Agent 系统的四个核心局限
-2. 用自己的话解释多 Agent 协作的价值
-3. 判断一个任务是否适合用多 Agent 架构
-4. 设计一个简单的多 Agent 流水线系统
+### 上下文窗口是有上限的
 
----
+很多人觉得 128K tokens 够用了。算一笔账：
 
-## 一、单 Agent 的天花板
+一个典型任务的 token 消耗：
+- System prompt + 工具定义：~5K
+- 5 轮对话历史：~10K
+- 搜索返回的 3 篇文档：~15K
+- 中间推理过程：~8K
+- 已经处理过的步骤输出：~20K
 
-### 1.1 上下文窗口瓶颈
+一轮下来 58K，两轮 100K+，三轮就开始丢信息。这不是模型能力问题，是物理限制。你可以用 RAG 来压缩历史，但压缩本身就是信息损失。
 
-```
-单 Agent 的上下文限制：
+多 Agent 的解法：每个 Agent 只管自己的上下文。搜索 Agent 搜完把结果交给分析 Agent，分析 Agent 不需要保留搜索过程的原始数据。上下文被自然地分段了。
 
-  以 GPT-4o 为例：
-  上下文窗口 = 128K tokens
+### 单一角色的能力稀释
 
-  听起来很大？算一笔账：
+一个 Agent 被要求同时搜索、分析、写报告，它的 system prompt 会越来越长，角色描述越来越模糊。模型对长 prompt 的指令遵循率会下降——这不是直觉，是可以用实验验证的。
 
-  一次复杂任务的上下文消耗：
-  ┌────────────────────────────────┬───────────┐
-  │  内容                          │  tokens   │
-  ├────────────────────────────────┼───────────┤
-  │  系统 Prompt                   │  2,000    │
-  │  工具定义（10 个工具）          │  3,000    │
-  │  对话历史（10 轮）             │  15,000   │
-  │  检索到的文档（5 篇）          │  20,000   │
-  │  中间推理过程                  │  10,000   │
-  │  ────────────────────────────  │  ──────── │
-  │  总计                          │  50,000   │
-  └────────────────────────────────┴───────────┘
+把同一个任务拆成三个 Agent 后，每个 Agent 的 system prompt 只有 200-300 字，角色明确，工具精简。同样的底层模型，输出质量会有明显差异。
 
-  剩余空间：128K - 50K = 78K
+### 错误累积是指数级的
 
-  如果任务更复杂（更多工具、更长对话、更多文档）？
-  → 上下文很快就不够用了
-  → 模型开始"遗忘"早期信息
-  → 推理质量下降
-```
+假设每步正确率 90%：
+- 3 步任务：0.9^3 = 73%
+- 5 步任务：0.9^5 = 59%
+- 10 步任务：0.9^10 = 35%
 
-### 1.2 专业能力稀释
+多 Agent 不能提高单步准确率，但能做到两件事：
+1. 每个 Agent 步骤更少，单 Agent 内的错误累积更小
+2. Agent 之间有明确的输入输出边界，下游可以验证上游结果，失败时只需重跑单个 Agent
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    "样样通，样样松" 问题                          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  单 Agent 的 Prompt：                                           │
-│  "你是一个全能助手，可以写代码、做分析、写报告、回答问题..."       │
-│                                                                 │
-│  问题：                                                         │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  角色 A：写 Python 代码                                 │   │
-│  │  角色 B：做数据统计分析                                  │   │
-│  │  角色 C：撰写商业报告                                   │   │
-│  │  角色 D：回答用户问题                                   │   │
-│  │                                                         │   │
-│  │  一个 Agent 同时扮演 4 个角色                            │   │
-│  │  → 每个角色都不够专业                                    │   │
-│  │  → 容易混淆不同任务的上下文                               │   │
-│  │  → Prompt 越长，指令遵循越差                              │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  多 Agent 的做法：                                               │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Coder Agent：只写代码，Prompt 精准聚焦                  │   │
-│  │  Analyst Agent：只做分析，Prompt 专注统计                 │   │
-│  │  Writer Agent：只写报告，Prompt 专注写作                  │   │
-│  │  QA Agent：只回答问题，Prompt 专注问答                    │   │
-│  │                                                         │   │
-│  │  每个 Agent 的 Prompt 更短、更精准                        │   │
-│  │  → 专业能力更强                                          │   │
-│  │  → 指令遵循更好                                          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+### 没有控制面
 
-### 1.3 错误累积效应
+单 Agent 是一条直线执行。你想在第 3 步之后暂停让人审批，实现起来非常别扭——要么用复杂的条件逻辑，要么用回调函数，要么用外部状态机。这些本质上都是在单 Agent 架构上"打补丁"。
 
-```
-单 Agent 多步推理的错误累积：
+多 Agent 天然有控制面：Agent 之间的调度逻辑就是控制面。在某个 Agent 之后暂停、审批、分支、重试，都是自然的编排操作。
 
-  假设每步正确率 95%
+## 什么时候该拆，什么时候不该拆
 
-  1 步任务：95%
-  5 步任务：0.95^5 = 77%
-  10 步任务：0.95^10 = 60%
-  20 步任务：0.95^20 = 36%
+该拆的信号：
+- 单个 prompt 已经超过 2000 字，还在不断加条件
+- 任务有明显的阶段性，每个阶段需要不同的工具集
+- 需要在某个阶段之后暂停等待人工输入
+- 同一阶段的多个子任务可以并行执行
+- 不同阶段的输出质量差异大，需要用不同模型
 
-  ┌────────────────────────────────────────────┐
-  │  步骤数 vs 成功率                           │
-  │                                            │
-  │  100% ┤●                                   │
-  │   90% ┤ ●                                  │
-  │   80% ┤  ●                                 │
-  │   70% ┤   ●                                │
-  │   60% ┤    ●                               │
-  │   50% ┤     ●                              │
-  │   40% ┤      ●                             │
-  │   30% ┤       ●●                           │
-  │   20% ┤         ●●●                        │
-  │   10% ┤            ●●●●●                   │
-  │    0% ┤─────────────────●●●●●●●●           │
-  │      └──┬──┬──┬──┬──┬──┬──┬──┬──┬──┬──    │
-  │         1  3  5  7  9 11 13 15 17 19 21    │
-  │                   步骤数                    │
-  └────────────────────────────────────────────┘
+不该拆的信号：
+- 任务就是一个简单的工具调用 + 结果格式化
+- 子任务之间高度耦合，A 必须看到 B 的全部中间状态才能工作
+- 延迟敏感，Agent 间的通信开销不可接受
+- 预算紧张，多 Agent 的 token 消耗至少是单 Agent 的 2-3 倍
 
-  多 Agent 的解决方案：
-  - 每个 Agent 只负责 2-3 步
-  - Agent 之间有明确的输入输出边界
-  - 下游 Agent 可以验证上游的输出
-  - 失败时只需重跑单个 Agent，不用全部重来
-```
+一个简单的决策方法：如果你能把任务画成一张有向图（节点是子任务，边是数据流），且图里有 3 个以上节点，值得考虑多 Agent。如果画出来就是一条直线，先别拆。
 
-### 1.4 可控性差
+## 第一个多 Agent：用纯 Python 理解核心思想
 
-```
-单 Agent 的可控性问题：
-
-  场景：一个 Agent 需要同时处理：
-  - 读取用户文件（低风险）
-  - 查询数据库（中风险）
-  - 调用支付 API（高风险）
-
-  问题：
-  1. 无法对不同操作设置不同权限
-  2. 无法在高风险操作前添加人工审批
-  3. 无法追踪哪个"能力"出了问题
-  4. 一个 Prompt 注入可能影响所有能力
-
-  多 Agent 的解决方案：
-  ┌─────────────────────────────────────────────────┐
-  │  File Agent    → 只能读文件，权限最小            │
-  │  DB Agent      → 只能查询，不能修改              │
-  │  Payment Agent → 需要人工审批才能执行            │
-  │                                                  │
-  │  每个 Agent 独立的权限边界                        │
-  │  高风险操作可以加审批 gate                        │
-  │  出问题可以精确定位是哪个 Agent                   │
-  └─────────────────────────────────────────────────┘
-```
-
----
-
-## 二、多 Agent 的核心价值
-
-### 2.1 专业化分工
-
-```
-类比：医院的分科制度
-
-  没有分科的"全能医生"：
-  - 内科、外科、眼科、牙科都看
-  - 每个领域都懂一点，但不精
-  - 复杂病例容易误诊
-
-  有分科的专业医院：
-  - 每个科室专注一个领域
-  - 专家级诊断能力
-  - 复杂病例可以多科室会诊
-
-  多 Agent 系统同理：
-  - 每个 Agent 专注一个"科室"
-  - 专业 Prompt + 专业工具
-  - 复杂任务可以多 Agent 协作
-```
-
-### 2.2 并行处理
-
-```
-串行 vs 并行：
-
-  任务：分析 3 个竞品的功能、价格、用户评价
-
-  单 Agent（串行）：
-  分析竞品 A → 分析竞品 B → 分析竞品 C → 汇总
-  总耗时 = T_A + T_B + T_C = 3T
-
-  多 Agent（并行）：
-  ┌─ 分析 Agent 1 → 竞品 A ─┐
-  ├─ 分析 Agent 2 → 竞品 B ─┤ → 汇总 Agent
-  └─ 分析 Agent 3 → 竞品 C ─┘
-  总耗时 = max(T_A, T_B, T_C) + T_汇总 ≈ T + T_汇总
-
-  加速比 ≈ 3x（假设有 3 个并行 Agent）
-```
-
-### 2.3 错误隔离
-
-```
-错误隔离示意：
-
-  单 Agent：
-  ┌─────────────────────────────────────┐
-  │  步骤1 → 步骤2 → 步骤3 → 步骤4     │
-  │         ↑ 错误在这里                 │
-  │  整个流程失败，需要全部重来           │
-  └─────────────────────────────────────┘
-
-  多 Agent：
-  ┌─────────────────────────────────────┐
-  │  Agent1 → Agent2 → Agent3 → Agent4  │
-  │           ↑ 错误在这里               │
-  │  只需重跑 Agent2，其他 Agent 的结果保留│
-  └─────────────────────────────────────┘
-
-  更好的做法：
-  - 每个 Agent 有重试机制
-  - 可以设置降级策略（Agent 失败时用备选方案）
-  - 可以记录每个 Agent 的输入输出用于调试
-```
-
----
-
-## 三、什么时候用多 Agent
-
-```
-适合多 Agent 的场景：
-
-  ✓ 任务可以分解为独立子任务
-  ✓ 不同子任务需要不同的"专业能力"
-  ✓ 子任务之间有明确的数据流
-  ✓ 需要并行处理提高效率
-  ✓ 需要在关键节点添加人工审批
-  ✓ 需要细粒度的权限控制
-
-不适合多 Agent 的场景：
-
-  ✗ 任务简单，单 Agent 就能搞定
-  ✗ 子任务高度耦合，无法独立执行
-  ✗ 延迟敏感，Agent 间通信开销不可接受
-  ✗ 预算有限，多 Agent 的 Token 消耗更高
-
-决策流程图：
-┌─────────────────────────────────────────────────┐
-│  任务是否复杂？                                   │
-│  ├── 否 → 用单 Agent                             │
-│  └── 是 → 能否分解为独立子任务？                  │
-│           ├── 否 → 用单 Agent + 长 Prompt         │
-│           └── 是 → 不同子任务需要不同能力？        │
-│                    ├── 否 → 用单 Agent + 循环     │
-│                    └── 是 → 用多 Agent             │
-└─────────────────────────────────────────────────┘
-```
-
----
-
-## 四、第一个多 Agent 示例
+不依赖任何框架，用最简单的方式实现一个三 Agent 流水线：
 
 ```python
-"""
-纯 Python 实现的多 Agent 流水线。
-不依赖任何框架，展示多 Agent 的核心思想。
-"""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
+import time
 
 
 @dataclass
-class AgentMessage:
-    """Agent 间传递的消息。"""
-    sender: str
-    content: str
-    metadata: dict = None
+class AgentContext:
+    """Agent 间传递的上下文。"""
+    query: str
+    data: dict = field(default_factory=dict)
+    trace: list[str] = field(default_factory=list)
+
+    def record(self, agent_name: str, output: str):
+        self.trace.append(f"[{agent_name}] {output[:80]}...")
 
 
-class SimpleAgent:
-    """简单的 Agent 基类。"""
-
-    def __init__(self, name: str, role: str, process_fn: Callable[[str], str]):
+class Agent:
+    def __init__(self, name: str, process: Callable[[AgentContext], str]):
         self.name = name
-        self.role = role
-        self.process_fn = process_fn
+        self.process = process
 
-    def execute(self, input_text: str) -> str:
-        print(f"  [{self.role}] 开始处理...")
-        result = self.process_fn(input_text)
-        print(f"  [{self.role}] 处理完成，输出 {len(result)} 字符")
-        return result
+    def run(self, ctx: AgentContext) -> AgentContext:
+        start = time.time()
+        output = self.process(ctx)
+        elapsed = time.time() - start
+        ctx.data[self.name] = output
+        ctx.record(self.name, f"完成，耗时 {elapsed:.1f}s")
+        return ctx
 
 
 class Pipeline:
-    """Agent 流水线。"""
-
     def __init__(self):
-        self.agents: list[SimpleAgent] = []
+        self.agents: list[Agent] = []
 
-    def add(self, agent: SimpleAgent) -> "Pipeline":
+    def add(self, agent: Agent) -> "Pipeline":
         self.agents.append(agent)
         return self
 
-    def run(self, initial_input: str) -> str:
-        result = initial_input
+    def execute(self, query: str) -> AgentContext:
+        ctx = AgentContext(query=query)
         for agent in self.agents:
-            result = agent.execute(result)
-        return result
+            ctx = agent.run(ctx)
+        return ctx
 
 
-# 使用示例
-def mock_search(input_text: str) -> str:
-    return f"搜索结果：关于「{input_text}」的 3 篇文章摘要..."
+# 定义三个 Agent
+def researcher(ctx: AgentContext) -> str:
+    return f"搜索 '{ctx.query}' 的结果：找到 3 篇相关文章，提取了关键数据点"
 
-def mock_analyze(input_text: str) -> str:
-    return f"分析洞察：从搜索结果中提取了 3 个关键趋势..."
+def analyst(ctx: AgentContext) -> str:
+    research = ctx.data["researcher"]
+    return f"基于研究结果的分析：识别出 3 个核心趋势，2 个风险点"
 
-def mock_write(input_text: str) -> str:
-    return f"研究报告：基于分析结果生成的完整报告...\n\n{input_text}"
+def writer(ctx: AgentContext) -> str:
+    analysis = ctx.data["analyst"]
+    return f"# 研究报告\n\n{analysis}\n\n## 结论\n综合分析后建议..."
 
 
+# 组装并运行
 pipeline = Pipeline()
-pipeline.add(SimpleAgent("searcher", "搜索专家", mock_search))
-pipeline.add(SimpleAgent("analyst", "分析专家", mock_analyze))
-pipeline.add(SimpleAgent("writer", "写作专家", mock_write))
+pipeline.add(Agent("researcher", researcher))
+pipeline.add(Agent("analyst", analyst))
+pipeline.add(Agent("writer", writer))
 
-result = pipeline.run("2025 年 AI Agent 发展趋势")
-print(f"\n最终输出:\n{result}")
+result = pipeline.execute("2025 年多 Agent 系统的发展趋势")
+print(f"最终输出:\n{result.data['writer']}")
+print(f"\n执行轨迹:")
+for step in result.trace:
+    print(f"  {step}")
 ```
 
----
+这个例子只有 60 行代码，但它包含了多 Agent 系统的核心要素：
+- **Agent 抽象**：有名字、有处理函数、有上下文
+- **上下文传递**：AgentContext 在 Agent 间流转，每个 Agent 读写不同的字段
+- **执行追踪**：trace 记录每个 Agent 的执行情况
+- **流水线编排**：Pipeline 按顺序调度 Agent
 
-## 常见误区
+## 一个容易忽略的成本问题
 
-```
-误区 1：多 Agent 一定比单 Agent 好
-  事实：简单任务用多 Agent 反而更慢、更贵、更难调试
-  建议：先用单 Agent，效果不够再考虑多 Agent
+多 Agent 系统的 token 消耗是单 Agent 的 N 倍（N = Agent 数量），因为每个 Agent 都有自己的 system prompt、工具定义和上下文。
 
-误区 2：Agent 越多越好
-  事实：Agent 越多，通信开销越大，协调越复杂
-  建议：从 2-3 个 Agent 开始，按需增加
+一个实际的数字对比：
 
-误区 3：多 Agent 可以完全替代人工
-  事实：关键决策仍需人工审批
-  建议：在高风险节点添加 Human-in-the-loop
+单 Agent 做竞品分析：~8K tokens（prompt + 工具 + 上下文 + 输出）
+三 Agent 做同样的事：
+- 搜索 Agent：~3K（prompt + 搜索工具 + 输出）
+- 分析 Agent：~4K（prompt + 搜索结果 + 输出）
+- 写作 Agent：~5K（prompt + 分析结果 + 输出）
+- 总计：~12K
 
-误区 4：Agent 间的通信不重要
-  事实：通信设计是多 Agent 系统的核心难题
-  建议：先设计好 Agent 间的输入输出格式
-```
+多花了 50% 的 token，换来的是：上下文更干净、每个 Agent 的 prompt 更精准、可以在 Agent 之间插入检查点。
 
----
-
-## 工程建议
-
-1. **从单 Agent 开始，按需演进**：先用单 Agent 验证核心逻辑，当遇到上下文瓶颈、能力稀释或需要并行处理时，再拆分为多 Agent。不要为了"看起来高级"而引入多 Agent 架构。
-2. **为每个 Agent 定义清晰的职责边界**：每个 Agent 应该有单一、明确的职责（如"只负责搜索""只负责分析"），输入输出格式在设计阶段就确定下来，避免职责重叠和数据格式混乱。
-3. **建立可观测性基础设施**：从第一版开始就为每个 Agent 添加结构化日志和追踪机制，记录输入、输出、耗时、错误。多 Agent 系统的调试难度远高于单 Agent，没有日志就是在"盲人摸象"。
-4. **在关键决策节点加入人工审批**：涉及高风险操作（删除数据、发送消息、支付）和不可逆操作时，使用 Human-in-the-loop 机制暂停执行，等待人类确认后再继续。
-
----
-
-## 小结
-
-```
-本课核心要点：
-
-1. 单 Agent 的四个局限：上下文瓶颈、能力稀释、错误累积、可控性差
-2. 多 Agent 的四个价值：专业分工、并行处理、错误隔离、可控性增强
-3. 判断标准：任务可分解 + 需要不同能力 + 有明确数据流 → 用多 Agent
-4. 最简单的多 Agent 是流水线模式，用纯 Python 就能实现
-
----
-
-**下一课**: [编排模式概览——Supervisor / Sequential / Parallel / Hierarchical](./02-编排模式概览.md)
-```
-
----
+值不值得？取决于任务复杂度。简单任务不值得，复杂任务的收益远超成本。
 
 ## 练习
 
-1. **分析题**：选择你做过的一个 AI 项目，分析它是否有单 Agent 的局限。如果有，设计一个多 Agent 方案。
+### 练习一：给 Pipeline 加错误处理
 
-2. **实现题**：扩展上面的 Pipeline 示例，添加错误处理（某个 Agent 失败时重试 1 次）和日志记录（记录每个 Agent 的输入输出）。
+在上面的 Pipeline 基础上，增加以下能力：
+1. 某个 Agent 执行失败时，重试 1 次
+2. 重试仍然失败，跳过该 Agent，在 ctx.data 中标记 `{"error": "agent_name failed"}`
+3. 下游 Agent 检查上游是否有 error，有则做降级处理
 
-3. **设计题**：设计一个"代码审查"多 Agent 系统，定义每个 Agent 的职责、输入输出格式、以及它们之间的协作流程。
+```python
+# 在这里实现你的 PipelineWithRetry
+# 提示：在 Pipeline.execute 的循环里加 try/except
+```
+
+### 练习二：实现并行 Agent
+
+当前的 Pipeline 是串行的。实现一个 `ParallelGroup`，让多个 Agent 并行执行：
+
+```python
+class ParallelGroup:
+    """让组内 Agent 并行执行，全部完成后继续。"""
+    def __init__(self, agents: list[Agent]):
+        self.agents = agents
+
+    def run(self, ctx: AgentContext) -> AgentContext:
+        # 用 concurrent.futures.ThreadPoolExecutor 并行执行
+        # 所有 Agent 的输出写入 ctx.data
+        ...
+```
+
+### 练习三：画架构图
+
+用纸笔或工具画出以下场景的多 Agent 架构图：
+- 场景：自动代码审查系统
+- 要求：标注每个 Agent 的职责、输入输出格式、Agent 之间的数据流
+- 额外：标出你认为需要人工审批的节点
+
+---
+
+## 参考答案
+
+### 练习一
+
+```python
+class PipelineWithRetry(Pipeline):
+    def execute(self, query: str) -> AgentContext:
+        ctx = AgentContext(query=query)
+        for agent in self.agents:
+            # 检查上游是否有错误
+            if any(k.startswith("_error_") for k in ctx.data):
+                ctx.record(agent.name, "跳过（上游有错误）")
+                continue
+
+            try:
+                ctx = agent.run(ctx)
+            except Exception as e:
+                # 重试一次
+                try:
+                    ctx.record(agent.name, f"首次失败: {e}，重试中...")
+                    ctx = agent.run(ctx)
+                except Exception as e2:
+                    ctx.data[f"_error_{agent.name}"] = str(e2)
+                    ctx.record(agent.name, f"重试失败: {e2}")
+        return ctx
+```
+
+关键判断：重试策略应该是"快速失败"还是"持续重试"？在多 Agent 场景中，快速失败通常更好——因为下游 Agent 可能有降级方案，持续重试只会增加延迟和成本。

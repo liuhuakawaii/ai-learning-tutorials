@@ -1,435 +1,360 @@
-# 第 1 课：LangGraph 核心概念——State / Node / Edge / Conditional Edge
+# LangGraph 核心概念：State、Node、Edge
 
-> **课程定位**：掌握 LangGraph 的核心抽象，为多 Agent 编排打下基础
-> **前置知识**：02-ai-agent-engineer-course 的 Agent 开发经验
-> **预计时长**：50 分钟
+> 前置知识：stage1 的纯 Python 多 Agent 编排经验
+> 预计时长：50 分钟
 
----
+## 为什么需要 LangGraph
 
-## 场景引入
+你在 stage1 用纯 Python 实现了三种编排器，遇到了这些问题：
+- 状态传递全靠手动管理 Context 对象
+- 条件路由全靠 if-else，路由逻辑和业务逻辑混在一起
+- 图的结构只存在于你脑子里，代码里看不到
+- 没有内置的中断、恢复、持久化机制
 
-你已经理解了多 Agent 编排的四种模式，但用纯 Python 实现时，状态传递全靠手动管理，条件路由全靠 if-else，图的结构全在你脑子里。一旦系统变复杂，代码就变得难以维护。你需要一个框架来把这些抽象标准化——LangGraph 的 State / Node / Edge 就是为此设计的。
+LangGraph 就是把这些抽象标准化了。它的核心思想：把 Agent 系统建模为一张有向图，State 在图中流转，Node 做实际工作，Edge 决定下一步去哪里。
 
----
+## State：流转在图中的数据
 
-## 学习目标
-
-完成本课学习后，你将能够：
-
-1. 画出 LangGraph 的 State → Node → Edge 执行流程
-2. 用 TypedDict 定义 State 并理解 Annotated 的作用
-3. 实现一个带条件边的多 Agent 图
-4. 说出 State 设计的三种常见模式
-
----
-
-## 一、LangGraph 是什么
-
-```
-LangGraph = LangChain 团队开发的图编排框架
-
-核心思想：
-  把 Agent 系统抽象成一个"有向图"
-  - Node = 做事情的函数
-  - Edge = 事情之间的连接
-  - State = 在图中流转的数据
-
-  ┌─────────────────────────────────────────────────────────┐
-  │                    LangGraph 执行模型                    │
-  │                                                         │
-  │  State ──→ Node A ──→ Edge ──→ Node B ──→ Edge ──→ END  │
-  │    │         │                    │                     │
-  │    │         ▼                    ▼                     │
-  │    │      修改 State           修改 State               │
-  │    │         │                    │                     │
-  │    └─────────┴────────────────────┘                     │
-  │              State 在节点间传递                           │
-  └─────────────────────────────────────────────────────────┘
-
-类比：
-  State = 流水线上的产品
-  Node  = 流水线上的工位
-  Edge  = 工位之间的传送带
-  Conditional Edge = 质检站（根据质量决定去哪个工位）
-```
-
----
-
-## 二、State（状态）
-
-### 2.1 定义 State
+State 是一个 TypedDict，定义了图中所有节点共享的数据结构。
 
 ```python
 from typing import TypedDict, Annotated
 from operator import add
 
-class AgentState(TypedDict):
-    """Agent 图的状态定义。"""
-    messages: Annotated[list[dict], add]  # 消息列表，自动累加
-    query: str                             # 用户查询
-    sql: str                               # 生成的 SQL
-    result: str                            # 查询结果
-    analysis: str                          # 分析结论
-    current_agent: str                     # 当前所在节点
-    error: str                             # 错误信息
+
+class ResearchState(TypedDict):
+    query: str
+    research: str
+    analysis: str
+    report: str
+    current_step: str
+    errors: Annotated[list[str], add]
 ```
 
-### 2.2 Annotated 的作用
+关键设计点：
 
-```
-Annotated[list, add] 的含义：
+**Annotated[list[str], add] 的作用**
 
-  普通 list：
-    节点 A 返回 {"messages": [msg1]}
-    节点 B 返回 {"messages": [msg2]}
-    最终 State["messages"] = [msg2]  ← 被覆盖了！
+普通字段的更新是"覆盖"——节点 A 返回 `{"errors": ["err1"]}`，节点 B 返回 `{"errors": ["err2"]}`，最终 errors 只有 `["err2"]`。
 
-  Annotated[list, add]：
-    节点 A 返回 {"messages": [msg1]}
-    节点 B 返回 {"messages": [msg2]}
-    最终 State["messages"] = [msg1, msg2]  ← 自动累加！
+加了 `Annotated[list[str], add]` 后，更新变成"追加"——最终 errors 是 `["err1", "err2"]`。
 
-  ┌─────────────────────────────────────────────────────────┐
-  │  reducer 函数决定了多个节点返回同名字段时如何合并          │
-  │                                                         │
-  │  add        → 列表拼接                                   │
-  │  无 reducer → 后者覆盖前者                                │
-  │  自定义     → 任何合并逻辑                                │
-  └─────────────────────────────────────────────────────────┘
+这在多 Agent 场景中很重要：多个 Agent 可能各自产生错误，你需要收集所有错误而不是只保留最后一个。
+
+**State 设计的三种常见模式**
+
+扁平模式——适合简单流水线：
+```python
+class SimpleState(TypedDict):
+    input: str
+    output: str
 ```
 
-### 2.3 State 设计模式
-
-```
-模式 1：扁平 State（简单场景）
-
-  class SimpleState(TypedDict):
-      input: str
-      output: str
-      step: str
-
-  适用：2-3 个节点的简单流水线
-
-模式 2：消息累加 State（对话场景）
-
-  class ChatState(TypedDict):
-      messages: Annotated[list, add]
-      current_agent: str
-
-  适用：多 Agent 对话系统
-
-模式 3：分阶段 State（复杂 pipeline）
-
-  class PipelineState(TypedDict):
-      query: str
-      sql: str
-      query_result: str
-      analysis: str
-      visualization: str
-      report: str
-      current_agent: str
-      error: str
-
-  适用：多阶段数据分析 pipeline
+分阶段模式——适合多步骤 pipeline，每个步骤有明确的输入输出：
+```python
+class PipelineState(TypedDict):
+    query: str
+    search_results: str
+    analysis: str
+    report: str
+    review_feedback: str
 ```
 
----
+消息累加模式——适合对话场景：
+```python
+class ChatState(TypedDict):
+    messages: Annotated[list[dict], add]
+    current_agent: str
+```
 
-## 三、Node（节点）
+选哪种？看数据流的形态。如果每个节点只写一个字段、读前一个节点的输出，用分阶段模式。如果多个节点都要往同一个列表里追加内容，用消息累加模式。
 
-### 3.1 节点函数签名
+## Node：做实际工作的函数
+
+Node 就是一个函数，接收 State，返回 State 的更新：
 
 ```python
-def my_node(state: AgentState) -> AgentState:
-    """
-    节点函数的规则：
-    1. 输入：当前 State
-    2. 输出：State 的更新（可以只返回修改的字段）
-    3. 可以是同步或异步
-    """
-    # 读取 State
+def researcher(state: ResearchState) -> dict:
+    """只需要返回要更新的字段，不用返回完整 State。"""
     query = state["query"]
-
-    # 执行操作
-    result = do_something(query)
-
-    # 返回更新（只需返回要修改的字段）
-    return {"result": result, "current_agent": "my_node"}
+    # 实际项目中这里调用搜索 API
+    result = f"关于 '{query}' 的研究结果..."
+    return {
+        "research": result,
+        "current_step": "analysis",
+    }
 ```
 
-### 3.2 节点类型
+Node 可以是任何东西：
+- LLM 调用（最常见）
+- 工具调用（搜索、数据库查询）
+- 纯逻辑判断（校验、格式转换）
+- 人工审批节点（暂停等待外部输入）
 
-```
-节点可以是任何函数：
+一个容易犯的错误：在 Node 里做太多事。每个 Node 应该只做一件事。如果你发现一个 Node 超过了 50 行代码，考虑拆分。
 
-1. LLM 调用节点
-   async def llm_node(state):
-       response = await llm.ainvoke(state["messages"])
-       return {"messages": [response]}
+## Edge：定义执行顺序
 
-2. 工具调用节点
-   def tool_node(state):
-       result = execute_tool(state["tool_name"], state["tool_input"])
-       return {"tool_result": result}
+### 普通边
 
-3. 纯逻辑节点
-   def validate_node(state):
-       if not state["sql"].strip().upper().startswith("SELECT"):
-           return {"error": "仅允许 SELECT 查询"}
-       return {}
-
-4. 人工审批节点
-   async def human_approval_node(state):
-       approved = await ask_human(state["report"])
-       return {"approved": approved}
-```
-
----
-
-## 四、Edge（边）
-
-### 4.1 普通边
+无条件跳转，从 A 到 B：
 
 ```python
-# 从 researcher 到 analyst（无条件）
+from langgraph.graph import StateGraph, END
+
+graph = StateGraph(ResearchState)
+graph.add_node("researcher", researcher)
+graph.add_node("analyst", analyst)
+
+# researcher 执行完直接到 analyst
 graph.add_edge("researcher", "analyst")
-
-# 从 report 到结束
-graph.add_edge("report", END)
+# analyst 执行完结束
+graph.add_edge("analyst", END)
 ```
 
-### 4.2 条件边
+### 条件边
+
+根据当前 State 决定下一步：
 
 ```python
-def should_continue(state: AgentState) -> str:
-    """根据状态决定下一个节点。"""
-    if state.get("error"):
-        return END
-    if state["current_agent"] == "query":
-        return "analysis"
-    elif state["current_agent"] == "analysis":
-        return "visualization"
-    elif state["current_agent"] == "visualization":
-        return "report"
-    else:
-        return END
+def route_after_research(state: ResearchState) -> str:
+    if state.get("errors"):
+        return "error_handler"
+    if not state.get("research"):
+        return END  # 搜索没有结果，直接结束
+    return "analyst"
 
-# 添加条件边
 graph.add_conditional_edges(
-    "query",           # 源节点
-    should_continue,   # 路由函数
+    "researcher",          # 从哪个节点出发
+    route_after_research,  # 路由函数
     {
-        "analysis": "analysis",
-        "visualization": "visualization",
+        "analyst": "analyst",
+        "error_handler": "error_handler",
         END: END,
     }
 )
 ```
 
-### 4.3 条件边的路由逻辑
+路由函数的返回值必须是 `add_conditional_edges` 第三个参数的 key 之一。返回值是字符串，不是节点函数——它只是告诉图"下一步去哪里"。
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    条件边执行流程                         │
-│                                                         │
-│  Node A 执行完毕                                         │
-│       │                                                 │
-│       ▼                                                 │
-│  调用 should_continue(state)                             │
-│       │                                                 │
-│       ├── 返回 "B" ──→ 执行 Node B                      │
-│       ├── 返回 "C" ──→ 执行 Node C                      │
-│       └── 返回 END ──→ 图执行结束                        │
-│                                                         │
-│  关键：路由函数只返回字符串（节点名），不执行节点           │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 五、完整示例
+## 完整示例：一个带错误处理的三节点图
 
 ```python
-"""
-完整的 LangGraph 多 Agent 示例。
-包含 State 定义、4 个节点、条件边、错误处理。
-"""
 from typing import TypedDict, Annotated
 from operator import add
 from langgraph.graph import StateGraph, END
 
 
-class AgentState(TypedDict):
-    messages: Annotated[list[str], add]
+class PipelineState(TypedDict):
     query: str
-    sql: str
-    result: str
+    research: str
     analysis: str
-    current_agent: str
-    error: str
+    report: str
+    current_step: str
+    errors: Annotated[list[str], add]
 
 
-def query_node(state: AgentState) -> dict:
-    """查询节点：生成 SQL 并执行。"""
+def researcher(state: PipelineState) -> dict:
     query = state["query"]
-
-    if "部门" in query:
-        sql = "SELECT * FROM departments"
-    elif "员工" in query:
-        sql = "SELECT * FROM employees"
-    else:
-        return {"error": f"无法理解查询: {query}", "current_agent": "error"}
-
-    result = f"[Mock] 执行 {sql}，返回 5 条记录"
+    if not query.strip():
+        return {"errors": ["查询为空"], "current_step": "error"}
     return {
-        "sql": sql,
-        "result": result,
-        "current_agent": "analysis",
-        "messages": [f"[查询] {sql}"],
+        "research": f"研究结果：关于 '{query}' 的 5 篇核心文献",
+        "current_step": "analysis",
     }
 
 
-def analysis_node(state: AgentState) -> dict:
-    """分析节点：分析查询结果。"""
-    analysis = f"基于 {state['result']} 的分析：数据趋势良好"
+def analyst(state: PipelineState) -> dict:
+    research = state["research"]
+    if "无结果" in research:
+        return {"errors": ["研究结果为空"], "current_step": "error"}
     return {
-        "analysis": analysis,
-        "current_agent": "report",
-        "messages": [f"[分析] {analysis}"],
+        "analysis": f"分析结论：识别出 3 个核心趋势",
+        "current_step": "report",
     }
 
 
-def report_node(state: AgentState) -> dict:
-    """报告节点：生成最终报告。"""
-    report = f"# 分析报告\n\n查询: {state['sql']}\n分析: {state['analysis']}"
+def reporter(state: PipelineState) -> dict:
+    analysis = state["analysis"]
     return {
-        "messages": [f"[报告] {report}"],
-        "current_agent": "done",
+        "report": f"# 报告\n\n{analysis}\n\n结论：建议采取行动。",
+        "current_step": "done",
     }
 
 
-def error_node(state: AgentState) -> dict:
-    """错误处理节点。"""
-    return {
-        "messages": [f"[错误] {state.get('error', '未知错误')}"],
-        "current_agent": "done",
-    }
+def error_handler(state: PipelineState) -> dict:
+    return {"report": f"处理失败：{'; '.join(state['errors'])}"}
 
 
-def route_after_query(state: AgentState) -> str:
-    """查询后的路由。"""
-    if state.get("error"):
-        return "error"
-    return "analysis"
+def route_from_researcher(state: PipelineState) -> str:
+    if state.get("current_step") == "error":
+        return "error_handler"
+    return "analyst"
 
 
-def route_after_analysis(state: AgentState) -> str:
-    """分析后的路由。"""
-    if state.get("error"):
-        return "error"
-    return "report"
+def route_from_analyst(state: PipelineState) -> str:
+    if state.get("current_step") == "error":
+        return "error_handler"
+    return "reporter"
 
 
 # 构建图
-graph = StateGraph(AgentState)
+graph = StateGraph(PipelineState)
+graph.add_node("researcher", researcher)
+graph.add_node("analyst", analyst)
+graph.add_node("reporter", reporter)
+graph.add_node("error_handler", error_handler)
 
-graph.add_node("query", query_node)
-graph.add_node("analysis", analysis_node)
-graph.add_node("report", report_node)
-graph.add_node("error", error_node)
+graph.set_entry_point("researcher")
 
-graph.set_entry_point("query")
-
-graph.add_conditional_edges("query", route_after_query, {
-    "analysis": "analysis",
-    "error": "error",
+graph.add_conditional_edges("researcher", route_from_researcher, {
+    "analyst": "analyst",
+    "error_handler": "error_handler",
 })
-graph.add_conditional_edges("analysis", route_after_analysis, {
-    "report": "report",
-    "error": "error",
+graph.add_conditional_edges("analyst", route_from_analyst, {
+    "reporter": "reporter",
+    "error_handler": "error_handler",
 })
-graph.add_edge("report", END)
-graph.add_edge("error", END)
+graph.add_edge("reporter", END)
+graph.add_edge("error_handler", END)
 
 app = graph.compile()
 
-# 运行
+# 正常流程
 result = app.invoke({
-    "messages": [],
-    "query": "各部门的预算和人数",
-    "sql": "", "result": "", "analysis": "",
-    "current_agent": "", "error": "",
+    "query": "2025 年 AI Agent 发展趋势",
+    "research": "", "analysis": "", "report": "",
+    "current_step": "", "errors": [],
 })
+print(result["report"])
 
-print("最终消息:")
-for msg in result["messages"]:
-    print(f"  {msg}")
+# 错误流程
+result = app.invoke({
+    "query": "",
+    "research": "", "analysis": "", "report": "",
+    "current_step": "", "errors": [],
+})
+print(result["report"])
 ```
 
----
+## State 设计的常见坑
 
-## 常见误区
+**坑 1：State 字段太多**
 
-```
-错误 1：State 字段类型不匹配
-  症状：运行时报 TypeError
-  原因：TypedDict 定义了 str，但节点返回了 int
-  解决：确保返回值类型与 State 定义一致
+超过 10 个字段时，考虑用嵌套 TypedDict 拆分：
 
-错误 2：忘记处理 error 字段
-  症状：错误发生后图继续执行后续节点
-  原因：条件边没有检查 error
-  解决：每个条件边都先检查 error
+```python
+class AgentOutputs(TypedDict):
+    research: str
+    analysis: str
+    report: str
 
-错误 3：Annotated 误用
-  症状：消息列表被覆盖而不是累加
-  原因：忘记加 Annotated[list, add]
-  解决：需要累加的字段必须用 Annotated
-
-错误 4：条件边返回不存在的节点名
-  症状：运行时报 KeyError
-  原因：路由函数返回了未注册的节点名
-  解决：确保返回值在 add_conditional_edges 的映射中
-
-错误 5：忘记 set_entry_point
-  症状：图不知道从哪里开始执行
-  原因：没有设置入口节点
-  解决：必须调用 graph.set_entry_point("node_name")
+class SystemState(TypedDict):
+    query: str
+    outputs: AgentOutputs
+    current_step: str
+    errors: Annotated[list[str], add]
 ```
 
----
+但嵌套不要太深，2 层就够了。太深说明你的图结构需要重新设计。
 
-## 工程建议
+**坑 2：忘记给 Annotated 字段初始化**
 
-1. **从单 Agent 开始，按需演进**：先用单 Agent 验证核心逻辑，当遇到上下文瓶颈、能力稀释或需要并行处理时，再拆分为多 Agent。不要为了"看起来高级"而引入多 Agent 架构。
-2. **为每个 Agent 定义清晰的职责边界**：每个 Agent 应该有单一、明确的职责（如"只负责搜索""只负责分析"），输入输出格式在设计阶段就确定下来，避免职责重叠和数据格式混乱。
-3. **建立可观测性基础设施**：从第一版开始就为每个 Agent 添加结构化日志和追踪机制，记录输入、输出、耗时、错误。多 Agent 系统的调试难度远高于单 Agent，没有日志就是在"盲人摸象"。
-4. **在关键决策节点加入人工审批**：涉及高风险操作（删除数据、发送消息、支付）和不可逆操作时，使用 Human-in-the-loop 机制暂停执行，等待人类确认后再继续。
+```python
+# 错误：errors 没有初始值
+result = app.invoke({"query": "xxx", "research": ""})
+# KeyError: 'errors'
 
----
-
-## 小结
-
-```
-本课核心要点：
-
-1. LangGraph = State + Node + Edge 的有向图
-2. State 用 TypedDict 定义，Annotated 控制字段合并行为
-3. Node 是接收 State、返回更新的函数
-4. Edge 定义执行顺序，Conditional Edge 实现动态路由
-5. 设计 State 时考虑：扁平 vs 消息累加 vs 分阶段
-
----
-
-**下一课**: [构建第一个多 Agent 图——用 LangGraph 实现 Supervisor 模式](./02-构建第一个多Agent图.md)
+# 正确：所有字段都要初始化
+result = app.invoke({
+    "query": "xxx", "research": "", "analysis": "", "report": "",
+    "current_step": "", "errors": [],
+})
 ```
 
----
+**坑 3：Node 返回了 State 中没有的字段**
+
+LangGraph 会忽略未在 State 中定义的字段，不会报错。如果你发现数据"丢了"，检查是否拼错了字段名。
 
 ## 练习
 
-1. **概念题**：画出一个 4 节点 LangGraph 图，标注 State 流转方向和 Conditional Edge 的路由逻辑。
+### 练习一：添加可视化节点
 
-2. **实现题**：扩展上面的完整示例，添加一个"可视化节点"，根据 analysis 的内容推荐图表类型（柱状图/折线图/饼图）。
+在上面的完整示例中，添加一个 `visualizer` 节点，根据 analysis 的内容推荐图表类型：
 
-3. **调试题**：故意在条件边中返回一个不存在的节点名，观察报错信息，理解错误处理的重要性。
+```python
+def visualizer(state: PipelineState) -> dict:
+    analysis = state["analysis"]
+    # 根据分析内容推荐图表类型
+    # 如果包含"趋势"→ 折线图
+    # 如果包含"对比"→ 柱状图
+    # 如果包含"占比"→ 饼图
+    # 默认 → 表格
+    ...
+```
+
+### 练习二：实现循环图
+
+当前的图是单向的。实现一个"审核→修改→再审核"的循环：
+
+- `reviewer` 节点审核报告，返回 `approved: True/False`
+- 如果不通过，回到 `reporter` 节点修改
+- 最多循环 3 次
+
+提示：在 State 里加一个 `review_count: int` 字段。
+
+---
+
+## 参考答案
+
+### 练习一
+
+```python
+def visualizer(state: PipelineState) -> dict:
+    analysis = state.get("analysis", "")
+    if "趋势" in analysis:
+        chart_type = "折线图"
+    elif "对比" in analysis:
+        chart_type = "柱状图"
+    elif "占比" in analysis:
+        chart_type = "饼图"
+    else:
+        chart_type = "表格"
+    return {"report": f"{state.get('report', '')}\n\n推荐使用: {chart_type}"}
+```
+
+### 练习二
+
+```python
+class ReviewState(TypedDict):
+    report: str
+    review_approved: bool
+    review_count: int
+    errors: Annotated[list[str], add]
+
+def reviewer(state: ReviewState) -> dict:
+    report = state["report"]
+    # 模拟审核逻辑
+    approved = len(report) > 100  # 简单的长度检查
+    return {
+        "review_approved": approved,
+        "review_count": state.get("review_count", 0) + 1,
+    }
+
+def should_continue(state: ReviewState) -> str:
+    if state["review_approved"]:
+        return END
+    if state["review_count"] >= 3:
+        return END  # 最多 3 次
+    return "reporter"
+
+graph = StateGraph(ReviewState)
+graph.add_node("reporter", reporter)
+graph.add_node("reviewer", reviewer)
+graph.set_entry_point("reporter")
+graph.add_edge("reporter", "reviewer")
+graph.add_conditional_edges("reviewer", should_continue, {
+    "reporter": "reporter",
+    END: END,
+})
+```

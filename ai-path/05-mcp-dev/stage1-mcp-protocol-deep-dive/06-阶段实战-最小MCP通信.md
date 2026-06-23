@@ -1,279 +1,282 @@
-# 06 阶段实战——用原始 HTTP 请求实现一个最小 MCP 通信
+# 阶段实战——用原始 HTTP 实现一个最小 MCP 通信
 
-> 动手实现一个最小的 MCP 通信，深入理解协议细节。
+> 课型：练习复盘课
+> 目标：不用 SDK，从零构造 MCP 消息，理解协议的每一层
 
-## 场景引入
+## 任务说明
 
-学了 MCP 协议的消息格式、传输层和能力协商，但总觉得隔着一层。Inspector 能连上 Server，但你不知道 Inspector 到底发了什么消息；SDK 能工作，但封装得太深看不到协议细节。你想从零开始，用最原始的 HTTP 请求手动构造一条 MCP 消息，亲手发给 Server，看看完整的请求和响应到底长什么样。只有这样，你才能真正理解协议的每一层在做什么。
+用 Python（Flask 或 http.server）实现一个最小 MCP Server，用 `requests` 实现 Client。整个过程不用任何 MCP SDK，只用标准库和 Flask。
 
----
+要求：
+- Server 支持 `initialize`、`tools/list`、`tools/call` 三个方法
+- Server 暴露一个 `calculator` 工具
+- Client 完成完整的初始化 → 发现 → 调用流程
+- 所有消息都是标准 JSON-RPC 2.0 格式
 
-## 学习目标
+## 实现路径
 
-- 用原始 HTTP 实现 MCP 通信
-- 掌握 MCP 消息的构造和解析
-- 完成一个可运行的 MCP 原型
-
----
-
-## 一、Server 实现
+### 第一步：Server 端——手动处理 JSON-RPC
 
 ```python
 from flask import Flask, request, jsonify
+import ast, operator
 
 app = Flask(__name__)
 
-# 工具注册
-tools = [
+TOOLS = [
     {
         "name": "calculator",
-        "description": "执行数学计算",
+        "description": "执行数学计算。仅支持加减乘除，不支持函数调用。",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "expression": {"type": "string", "description": "数学表达式"}
+                "expression": {"type": "string", "description": "数学表达式，如 '2 + 3 * 4'"}
             },
             "required": ["expression"]
         }
     }
 ]
 
+SAFE_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub,
+    ast.Mult: operator.mul, ast.Div: operator.truediv,
+}
+
+def safe_eval(expr: str) -> float:
+    """安全的表达式求值——只允许数字和四则运算"""
+    def _eval(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in SAFE_OPS:
+            return SAFE_OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return -_eval(node.operand)
+        raise ValueError(f"不支持的表达式: {expr}")
+    return _eval(ast.parse(expr, mode='eval').body)
+
+def jsonrpc_ok(req_id, result):
+    return jsonify({"jsonrpc": "2.0", "id": req_id, "result": result})
+
+def jsonrpc_error(req_id, code, message):
+    return jsonify({"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}})
+
 @app.route("/mcp", methods=["POST"])
 def handle_mcp():
-    """处理 MCP 请求"""
-    message = request.json
-    
-    method = message.get("method")
-    params = message.get("params", {})
-    request_id = message.get("id")
-    
+    msg = request.json
+    method = msg.get("method")
+    params = msg.get("params", {})
+    req_id = msg.get("id")
+
     if method == "initialize":
-        return jsonify({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": {
-                "capabilities": {"tools": {"listChanged": True}},
-                "serverInfo": {"name": "minimal-mcp-server", "version": "1.0.0"}
-            }
+        return jsonrpc_ok(req_id, {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {"listChanged": True}},
+            "serverInfo": {"name": "minimal-mcp", "version": "0.1.0"}
         })
-    
-    elif method == "tools/list":
-        return jsonify({
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": {"tools": tools}
-        })
-    
-    elif method == "tools/call":
+
+    if method == "notifications/initialized":
+        return "", 204
+
+    if method == "tools/list":
+        return jsonrpc_ok(req_id, {"tools": TOOLS})
+
+    if method == "tools/call":
         tool_name = params.get("name")
-        arguments = params.get("arguments", {})
-        
-        if tool_name == "calculator":
-            # 用 ast.literal_eval 替代 eval()，防止代码注入
-            import ast, operator
-            expression = arguments.get("expression", "0")
-            # 只允许数字和基本算术运算
-            allowed_ops = {ast.Add: operator.add, ast.Sub: operator.sub,
-                          ast.Mult: operator.mul, ast.Div: operator.truediv}
-            def safe_eval(node):
-                if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
-                    return node.value
-                elif isinstance(node, ast.BinOp) and type(node.op) in allowed_ops:
-                    return allowed_ops[type(node.op)](safe_eval(node.left), safe_eval(node.right))
-                elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-                    return -safe_eval(node.operand)
-                raise ValueError(f"不支持的表达式: {expression}")
-            result = safe_eval(ast.parse(expression, mode='eval').body)
-            return jsonify({
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {
-                    "content": [{"type": "text", "text": str(result)}]
-                }
+        args = params.get("arguments", {})
+        if tool_name != "calculator":
+            return jsonrpc_error(req_id, -32601, f"未知工具: {tool_name}")
+        try:
+            result = safe_eval(args.get("expression", "0"))
+            return jsonrpc_ok(req_id, {"content": [{"type": "text", "text": str(result)}]})
+        except Exception as e:
+            return jsonrpc_ok(req_id, {
+                "content": [{"type": "text", "text": f"计算错误: {e}"}],
+                "isError": True
             })
-    
-    return jsonify({
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "error": {"code": -32601, "message": "Method not found"}
-    })
+
+    return jsonrpc_error(req_id, -32601, f"未知方法: {method}")
 
 if __name__ == "__main__":
     app.run(port=8080)
 ```
 
----
-
-## 二、Client 实现
+### 第二步：Client 端——手动构造请求
 
 ```python
 import requests
-import json
 
-class MinimalMCPClient:
-    """最小 MCP 客户端"""
-    
-    def __init__(self, server_url: str):
-        self.server_url = server_url
-        self.request_id = 0
-    
-    def _send_request(self, method: str, params: dict = None) -> dict:
-        """发送请求"""
-        self.request_id += 1
-        
-        message = {
-            "jsonrpc": "2.0",
-            "id": self.request_id,
-            "method": method
-        }
-        if params:
-            message["params"] = params
-        
-        response = requests.post(self.server_url, json=message)
-        return response.json()
-    
-    def initialize(self) -> dict:
-        """初始化"""
-        return self._send_request("initialize", {
-            "capabilities": {"tools": {}}
-        })
-    
-    def list_tools(self) -> list:
-        """获取工具列表"""
-        result = self._send_request("tools/list")
-        return result.get("result", {}).get("tools", [])
-    
-    def call_tool(self, name: str, arguments: dict) -> str:
-        """调用工具"""
-        result = self._send_request("tools/call", {
-            "name": name,
-            "arguments": arguments
-        })
-        content = result.get("result", {}).get("content", [])
-        return content[0].get("text", "") if content else ""
+SERVER_URL = "http://localhost:8080/mcp"
+request_id = 0
 
-# 使用示例
-client = MinimalMCPClient("http://localhost:8080/mcp")
+def send(method, params=None):
+    global request_id
+    request_id += 1
+    msg = {"jsonrpc": "2.0", "id": request_id, "method": method}
+    if params:
+        msg["params"] = params
+    resp = requests.post(SERVER_URL, json=msg)
+    return resp.json()
 
-# 初始化
-client.initialize()
+# 1. 初始化
+init_result = send("initialize", {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {"tools": {}},
+    "clientInfo": {"name": "my-client", "version": "0.1.0"}
+})
+print(f"Server: {init_result['result']['serverInfo']['name']}")
 
-# 获取工具列表
-tools = client.list_tools()
-print(f"可用工具：{tools}")
+# 2. 通知 Server 客户端就绪
+send("notifications/initialized")
 
-# 调用工具
-result = client.call_tool("calculator", {"expression": "2 + 3 * 4"})
-print(f"计算结果：{result}")
+# 3. 发现工具
+tools_result = send("tools/list")
+for tool in tools_result["result"]["tools"]:
+    print(f"  工具: {tool['name']} - {tool['description']}")
+
+# 4. 调用工具
+call_result = send("tools/call", {
+    "name": "calculator",
+    "arguments": {"expression": "2 + 3 * 4"}
+})
+print(f"结果: {call_result['result']['content'][0]['text']}")
 ```
 
----
-
-## 三、运行测试
+### 第三步：验证
 
 ```bash
-# 启动 Server
+# 终端 1：启动 Server
 python server.py
 
-# 运行 Client
+# 终端 2：运行 Client
 python client.py
-
 # 输出：
-# 可用工具：[{'name': 'calculator', 'description': '执行数学计算', ...}]
-# 计算结果：14
+# Server: minimal-mcp
+#   工具: calculator - 执行数学计算。仅支持加减乘除，不支持函数调用。
+# 结果: 14
 ```
+
+## 复盘：关键判断
+
+### 1. initialize 必须在 tools/list 之前
+
+MCP 协议规定：Client 必须先发送 `initialize`，Server 返回能力信息后，Client 发送 `notifications/initialized`，之后才能调用其他方法。这不是形式主义——`initialize` 阶段双方交换能力信息，决定了后续哪些方法可用。
+
+如果跳过初始化直接调 `tools/list`，规范的 Server 会返回错误。
+
+### 2. notifications/initialized 没有 id
+
+通知（notification）是不需要响应的消息。JSON-RPC 2.0 规定：有 `id` 的是请求，没 `id` 的是通知。`notifications/initialized` 是通知，所以没有 `id` 字段，Server 也不返回响应。
+
+### 3. tools/call 的错误要走 result，不是 error
+
+Tool 执行失败（比如表达式语法错误）应该在 `result` 里返回 `isError: true`，而不是返回 JSON-RPC error。JSON-RPC error 是协议层的错误（方法不存在、参数格式错误），Tool 执行失败是业务层的错误。
+
+```
+协议层错误 → 返回 error 字段
+  {"jsonrpc": "2.0", "id": 1, "error": {"code": -32601, "message": "Method not found"}}
+
+业务层错误 → 返回 result 字段 + isError
+  {"jsonrpc": "2.0", "id": 1, "result": {"content": [...], "isError": true}}
+```
+
+### 4. safe_eval 为什么不用 eval()
+
+`eval()` 会执行任意 Python 代码。用户传入 `__import__('os').system('rm -rf /')` 就能删掉你的服务器。用 `ast.parse` + 白名单操作符，只允许数字和四则运算。
+
+这不是"最佳实践"，是安全底线。生产环境的 MCP Server 处理的是真实系统能力（数据库、文件系统、API），输入校验比这个例子严格得多。
+
+## 常见错误
+
+| 错误 | 现象 | 原因 |
+|------|------|------|
+| 跳过初始化 | Server 返回 -32600 | 没发 initialize 就调 tools/list |
+| 把通知当请求 | Client 等响应超时 | notifications/initialized 没有 id，不该等响应 |
+| Tool 错误返回 error | Client 认为协议出错 | 业务错误应该返回 result + isError |
+| 用 eval() | 服务器被入侵 | 用户输入恶意代码直接执行 |
+| 不处理未知方法 | Server 返回 None | method 不在已知列表里要返回 -32601 |
+
+## 练习
+
+### 练习一：添加一个新 Tool
+
+在 Server 中添加一个 `weather` Tool，接受 `city` 参数，返回 Mock 天气数据。要求：
+- 用真实的城市-温度映射（不要随机数）
+- description 写清楚 Tool 做什么、什么时候用、有什么限制
+- Client 能正确发现并调用这个 Tool
+
+### 练习二：测试边界情况
+
+用 curl 或修改 Client 代码，测试以下场景，记录 Server 的响应：
+
+1. 发送一个不存在的 method（如 `"method": "tools/delete"`）
+2. 发送缺少 `method` 字段的请求
+3. 调用 calculator 时传入 `{"expression": "__import__('os')"}`
+4. 调用 calculator 时传入空字符串
+5. 连续快速发送 10 个请求
+
+### 练习三：添加日志
+
+在 Server 的 `handle_mcp` 函数入口和出口打印完整的请求和响应消息。然后重新运行 Client，观察消息流。
+
+```python
+# 提示：在 handle_mcp 开头加
+print(f">>> {request.json}")
+
+# 在返回前加
+print(f"<<< {response.get_json()}")
+```
+
+回答：从日志中能看到 MCP 协议的哪些设计细节？
 
 ---
 
-## 四、协议分析
+## 参考答案
 
-```
-完整的消息流：
+### 练习一
 
-1. 初始化
-   Client → Server:
-   {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {...}}
-   
-   Server → Client:
-   {"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {...}}}
+```python
+# 添加到 TOOLS 列表
+{
+    "name": "weather",
+    "description": "查询城市天气。返回当前温度和天气状况。仅支持中国主要城市。",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "city": {"type": "string", "description": "城市名称，如 '北京'、'上海'"}
+        },
+        "required": ["city"]
+    }
+}
 
-2. 工具列表
-   Client → Server:
-   {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
-   
-   Server → Client:
-   {"jsonrpc": "2.0", "id": 2, "result": {"tools": [...]}}
+# 添加到 handle_mcp 的 tools/call 分支
+WEATHER_DATA = {"北京": "晴 25°C", "上海": "多云 22°C", "深圳": "阵雨 28°C"}
 
-3. 工具调用
-   Client → Server:
-   {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {...}}
-   
-   Server → Client:
-   {"jsonrpc": "2.0", "id": 3, "result": {"content": [...]}}
-```
-
-## 常见误区
-
-```
-误区 1：最小实现就是 Hello World
-  最小 MCP 实现必须包含 initialize → tools/list → tools/call 三个阶段。
-  跳过初始化直接调用工具，不符合协议规范，大多数 Client 会拒绝连接。
-
-误区 2：用 eval() 处理用户输入的表达式
-  即使是教学示例，也不能用 eval() 处理用户输入。
-  用 ast.literal_eval 或自己写的解析器，养成安全编码的习惯。
-
-误区 3：Server 返回错误就完事了
-  错误响应要包含有意义的错误码和错误信息。
-  不要所有错误都返回 -32603 Internal error，Client 无法区分错误类型。
-
-误区 4：测试只需要跑通 happy path
-  必须测试边界情况：空输入、非法参数、未知方法、超长消息。
-  这些才是生产环境中最常见的问题。
+if tool_name == "weather":
+    city = args.get("city", "")
+    weather = WEATHER_DATA.get(city)
+    if weather:
+        return jsonrpc_ok(req_id, {"content": [{"type": "text", "text": weather}]})
+    return jsonrpc_ok(req_id, {
+        "content": [{"type": "text", "text": f"不支持的城市: {city}"}],
+        "isError": True
+    })
 ```
 
----
+### 练习二
 
-## 工程建议
+| 测试 | 预期响应 | 错误码 |
+|------|----------|--------|
+| 不存在的 method | `error: {"code": -32601}` | -32601 Method not found |
+| 缺少 method | `error: {"code": -32600}` | -32600 Invalid request |
+| 危险表达式 | `error: {"code": -32602}` 或计算错误 | 取决于实现 |
+| 空字符串 | `result: "0"` 或计算错误 | 取决于 safe_eval 实现 |
+| 连续 10 个请求 | 全部正常返回 | 无错误 |
 
-```
-1. 先用 curl 手动测试
-   在写 Client 代码之前，先用 curl 发送 JSON-RPC 请求。
-   这样可以隔离 Server 的问题和 Client 的问题。
+### 练习三
 
-2. 把消息流打印到日志
-   在 Server 的入口和出口打印完整的请求和响应消息。
-   调试 MCP 问题时，消息流日志是最有价值的排查工具。
-
-3. 从 HTTP 迁移到 stdio 很容易
-   最小实现用 HTTP 是为了方便测试，但生产环境通常用 stdio。
-   消息格式完全一样，只是传输方式不同。
-
-4. 为 final-project 打基础
-   这个最小实现是你后续所有 MCP Server 开发的基础模板。
-   把它保存好，后面的课程会在此基础上逐步扩展。
-```
-
----
-
-## 小结
-
-1. 用原始 HTTP 实现 MCP 通信
-2. Server 处理 initialize、tools/list、tools/call
-3. Client 构造和发送 MCP 请求
-4. 理解完整的协议消息流
-
-阶段总结：
-  你已经深入理解了 MCP 协议的细节。
-  下一阶段，我们将学习如何开发自定义 MCP Server。
-```
-
----
-
-## 作业
-
-1. **完成实战**：运行本课的最小 MCP 示例。
-
-2. **扩展题**：添加一个新的工具（如天气查询）。
-
-3. **协议题**：用 Wireshark 或日志分析 MCP 消息流。
+日志中能看到的设计细节：
+1. `initialize` 的请求和响应都有 `id`，是标准请求-响应模式
+2. `notifications/initialized` 没有 `id`，Server 不返回响应
+3. 每个请求的 `id` 是递增的，用于匹配请求和响应
+4. `tools/call` 的参数结构是 `{name, arguments}`，不是直接传参数
+5. 错误响应和成功响应不能同时存在（有 `result` 就没 `error`）

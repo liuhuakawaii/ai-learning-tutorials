@@ -2,197 +2,113 @@
 
 > 不理解 token，你就无法控制成本。不理解请求生命周期，你就无法优化延迟。
 
-## 场景引入
-
-你拿到了 OpenAI 的 API Key，照着文档写了三行代码调通了 GPT-4o。但上线第一天就出问题了：用户疯狂发请求触发了速率限制，返回 429 错误；一天下来 API 费用比预期高了十倍，因为没人算过 token 成本；偶尔网络抖动导致请求失败，用户看到的是白屏。调通 API 只是起点，真正的问题是：怎么控制成本？怎么处理速率限制？怎么让调用足够健壮？
-
-## 学习目标
-
-- 理解 LLM API 的完整请求生命周期
-- 掌握 token 计算、成本控制、速率限制处理
-- 实现健壮的 API 调用封装（重试、超时、降级）
-- 理解不同模型的定价策略和性能特点
-
-## 前置要求
-
-- 已完成阶段 1，后端骨架可运行
-- 有 OpenAI API Key（或兼容 API）
-- HTTP 协议基础
+你拿到了 OpenAI 的 API Key，照着文档写了三行代码调通了 GPT-4o。但上线第一天就出问题了：用户疯狂发请求触发了速率限制，返回 429；一天下来 API 费用比预期高了十倍；偶尔网络抖动导致请求失败，用户看到白屏。调通 API 只是起点，真正的问题是：怎么控制成本？怎么处理速率限制？怎么让调用足够健壮？
 
 ## 请求生命周期
 
-一个 LLM API 调用的完整过程：
+一个 LLM API 调用的完整链路：
 
 ```
 用户输入 → Prompt 组装 → Token 编码 → 网络传输 → 模型推理 → Token 解码 → 流式/一次性返回 → 前端渲染
 ```
 
-每一步都有可能出问题：
-
-```python
-# 最基本的 API 调用
-from openai import AsyncOpenAI
-
-client = AsyncOpenAI()
-
-async def call_llm(messages: list[dict]) -> str:
-    try:
-        response = await client.chat.completions.create(
-            model="gpt-4o",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=4096,
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        # 这里什么错误都可能：网络超时、API Key 无效、余额不足、速率限制...
-        raise
-```
+每一步都可能出问题。Prompt 组装可能超出上下文窗口，网络传输可能超时，模型推理可能触发速率限制。你封装的 LLM 客户端需要处理所有这些情况。
 
 ## Token 经济学
 
-### 什么是 token
-
-token 不是字符，不是单词，是模型处理文本的最小单位。
-
-```
-"Hello, world!"  →  ["Hello", ",", " world", "!"]  →  4 tokens
-"你好世界"        →  ["你好", "世界"]                →  2 tokens（大约）
-```
-
-### Token 计算
+Token 不是字符，不是单词，是模型处理文本的最小单位。"Hello, world!" 是 4 个 token，"你好世界"大约 2 个 token。中文大约 1 个字 ≈ 1.5-2 个 token。
 
 ```python
 import tiktoken
 
 def count_tokens(text: str, model: str = "gpt-4o") -> int:
-    """计算文本的 token 数量"""
     encoding = tiktoken.encoding_for_model(model)
     return len(encoding.encode(text))
 
-def count_messages_tokens(messages: list[dict], model: str = "gpt-4o") -> int:
-    """计算消息列表的 token 总数（包括格式开销）"""
-    encoding = tiktoken.encoding_for_model(model)
-    tokens_per_message = 3  # 每条消息的格式开销
-    tokens_per_name = 1     # name 字段的额外开销
-    
-    total = 0
-    for msg in messages:
-        total += tokens_per_message
-        for key, value in msg.items():
-            total += len(encoding.encode(value))
-            if key == "name":
-                total += tokens_per_name
-    total += 3  # 回复的格式开销
-    return total
-```
-
-### 成本计算
-
-```python
-# 2025 年主流模型定价（每 1M tokens，美元）
+# 计算成本
 MODEL_PRICING = {
     "gpt-4o":            {"input": 2.50,  "output": 10.00},
     "gpt-4o-mini":       {"input": 0.15,  "output": 0.60},
     "claude-sonnet-4-20250514": {"input": 3.00,  "output": 15.00},
-    "claude-3.5-haiku":  {"input": 0.80,  "output": 4.00},
 }
 
-def calculate_cost(
-    model: str,
-    input_tokens: int,
-    output_tokens: int,
-) -> float:
-    """计算 API 调用成本（美元）"""
-    pricing = MODEL_PRICING.get(model)
-    if not pricing:
-        return 0.0
-    
-    input_cost = (input_tokens / 1_000_000) * pricing["input"]
-    output_cost = (output_tokens / 1_000_000) * pricing["output"]
-    
-    return input_cost + output_cost
-
-# 示例
-cost = calculate_cost("gpt-4o", input_tokens=2000, output_tokens=500)
-print(f"本次调用成本：${cost:.6f}")  # ~$0.01
+def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    p = MODEL_PRICING.get(model, {"input": 0, "output": 0})
+    return (input_tokens * p["input"] + output_tokens * p["output"]) / 1_000_000
 ```
+
+一次典型的 10 轮对话大约消耗 3000-5000 input tokens + 500 output tokens。用 gpt-4o 大约 $0.01，用 gpt-4o-mini 大约 $0.001。差 10 倍。这就是为什么简单任务（意图分类、格式转换）应该用便宜模型，复杂推理才用强模型。
 
 ## 速率限制
 
-OpenAI 的速率限制包括：
-
-| 维度 | 说明 | 处理方式 |
-|------|------|----------|
-| RPM | 每分钟请求数 | 请求队列 + 限流 |
-| TPM | 每分钟 token 数 | token 计数 + 延迟 |
-| 并发 | 同时进行的请求数 | 信号量控制 |
+OpenAI 的速率限制包括 RPM（每分钟请求数）、TPM（每分钟 token 数）、并发数。处理方式是信号量控制并发 + 指数退避重试：
 
 ```python
 import asyncio
 from openai import AsyncOpenAI, RateLimitError
 
 class LLMClient:
-    """带速率限制和重试的 LLM 客户端"""
-    
     def __init__(self):
         self.client = AsyncOpenAI()
-        self.semaphore = asyncio.Semaphore(10)  # 最多 10 个并发请求
+        self.semaphore = asyncio.Semaphore(10)  # 最多 10 个并发
     
-    async def call(
-        self,
-        messages: list[dict],
-        model: str = "gpt-4o",
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        max_retries: int = 3,
-    ) -> dict:
-        """调用 LLM API，带重试和速率限制"""
-        
+    async def call(self, messages, model="gpt-4o", max_retries=3, **kwargs):
         for attempt in range(max_retries):
             try:
                 async with self.semaphore:
                     response = await self.client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
+                        model=model, messages=messages, **kwargs
                     )
-                
                 usage = response.usage
                 return {
                     "content": response.choices[0].message.content,
                     "input_tokens": usage.prompt_tokens,
                     "output_tokens": usage.completion_tokens,
-                    "model": response.model,
-                    "cost": calculate_cost(
-                        model, usage.prompt_tokens, usage.completion_tokens
-                    ),
+                    "cost": calculate_cost(model, usage.prompt_tokens, usage.completion_tokens),
                 }
-            
             except RateLimitError:
-                # 速率限制：指数退避
                 wait_time = 2 ** attempt
                 await asyncio.sleep(wait_time)
-            
-            except Exception as e:
+            except Exception:
                 if attempt == max_retries - 1:
                     raise
                 await asyncio.sleep(1)
-        
         raise Exception("Max retries exceeded")
 ```
 
-## API 调用封装
+指数退避的关键：`2 ** attempt`。第一次等 1 秒，第二次 2 秒，第三次 4 秒。不要用固定间隔重试——在限流场景下，固定间隔会让情况更糟。
 
-### 基础封装
+## 错误处理
+
+LLM API 的错误类型不同，处理方式也不同：
 
 ```python
-# backend/app/services/llm_service.py
-from openai import AsyncOpenAI
-from anthropic import AsyncAnthropic
-from dataclasses import dataclass
+from openai import APITimeoutError, APIConnectionError, RateLimitError, AuthenticationError
 
+async def safe_llm_call(messages, model="gpt-4o", **kwargs):
+    try:
+        return await llm_client.call(messages, model, **kwargs)
+    except AuthenticationError:
+        # API Key 无效——配置问题，不能重试
+        raise AppError("LLM_AUTH_ERROR", "AI 服务认证失败", 500)
+    except RateLimitError:
+        # 速率限制——可以重试，给用户友好提示
+        raise AppError("LLM_RATE_LIMITED", "AI 服务繁忙，请稍后再试", 429)
+    except APITimeoutError:
+        # 超时——可能是 prompt 太长或模型负载高
+        raise AppError("LLM_TIMEOUT", "AI 服务响应超时", 504)
+    except APIConnectionError:
+        # 网络问题
+        raise AppError("LLM_CONNECTION_ERROR", "无法连接 AI 服务", 502)
+```
+
+区分"可重试"和"不可重试"错误。AuthenticationError 重试一万次也没用，RateLimitError 等一会儿就好了。
+
+## 多模型适配
+
+不同模型的 API 格式略有差异。OpenAI 和 Anthropic 的消息结构不同，system prompt 的传递方式不同。封装一个统一接口：
+
+```python
 @dataclass
 class LLMResponse:
     content: str
@@ -200,389 +116,56 @@ class LLMResponse:
     input_tokens: int
     output_tokens: int
     cost: float
-    latency: float
 
 class LLMService:
-    """统一的 LLM 调用服务"""
-    
-    def __init__(self):
-        self.openai = AsyncOpenAI()
-        self.anthropic = AsyncAnthropic()
-    
-    async def chat(
-        self,
-        messages: list[dict],
-        model: str = "gpt-4o",
-        **kwargs,
-    ) -> LLMResponse:
-        """统一调用接口"""
-        import time
-        start = time.perf_counter()
-        
+    async def chat(self, messages, model="gpt-4o", **kwargs) -> LLMResponse:
         if model.startswith("gpt"):
-            result = await self._call_openai(messages, model, **kwargs)
+            return await self._call_openai(messages, model, **kwargs)
         elif model.startswith("claude"):
-            result = await self._call_anthropic(messages, model, **kwargs)
-        else:
-            raise ValueError(f"Unsupported model: {model}")
-        
-        result.latency = time.perf_counter() - start
-        return result
-    
-    async def _call_openai(
-        self, messages: list[dict], model: str, **kwargs
-    ) -> LLMResponse:
-        response = await self.openai.chat.completions.create(
-            model=model, messages=messages, **kwargs
-        )
-        usage = response.usage
-        return LLMResponse(
-            content=response.choices[0].message.content,
-            model=response.model,
-            input_tokens=usage.prompt_tokens,
-            output_tokens=usage.completion_tokens,
-            cost=calculate_cost(model, usage.prompt_tokens, usage.completion_tokens),
-            latency=0,
-        )
-    
-    async def _call_anthropic(
-        self, messages: list[dict], model: str, **kwargs
-    ) -> LLMResponse:
-        # Anthropic API 格式略有不同
-        system = kwargs.pop("system", "")
-        response = await self.anthropic.messages.create(
-            model=model,
-            system=system,
-            messages=messages,
-            max_tokens=kwargs.get("max_tokens", 4096),
-        )
-        return LLMResponse(
-            content=response.content[0].text,
-            model=response.model,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            cost=calculate_cost(
-                model, response.usage.input_tokens, response.usage.output_tokens
-            ),
-            latency=0,
-        )
+            return await self._call_anthropic(messages, model, **kwargs)
+        raise ValueError(f"Unsupported model: {model}")
 ```
 
-## 错误处理策略
-
-```python
-from openai import (
-    APITimeoutError,
-    APIConnectionError,
-    RateLimitError,
-    AuthenticationError,
-    BadRequestError,
-)
-
-async def safe_llm_call(messages, model="gpt-4o", **kwargs):
-    """安全的 LLM 调用，包含完整错误处理"""
-    try:
-        return await llm_service.chat(messages, model, **kwargs)
-    
-    except AuthenticationError:
-        # API Key 无效或过期
-        raise AppError("LLM_AUTH_ERROR", "AI 服务认证失败，请联系管理员", 500)
-    
-    except RateLimitError:
-        # 速率限制
-        raise AppError("LLM_RATE_LIMITED", "AI 服务繁忙，请稍后再试", 429)
-    
-    except APITimeoutError:
-        # 超时
-        raise AppError("LLM_TIMEOUT", "AI 服务响应超时，请重试", 504)
-    
-    except APIConnectionError:
-        # 网络错误
-        raise AppError("LLM_CONNECTION_ERROR", "无法连接 AI 服务", 502)
-    
-    except BadRequestError as e:
-        # 请求格式错误（通常是消息太长）
-        raise AppError("LLM_BAD_REQUEST", f"请求格式错误：{e}", 400)
-```
+业务代码只调 `llm_service.chat()`，不关心底层是 OpenAI 还是 Anthropic。后面阶段 6 的多模型降级（主模型挂了切备选）就是基于这个封装。
 
 ## 练习
 
-### 练习 1：Token 计算
+### 练习 1：Token 计算与成本对比
 
-1. 计算以下文本的 token 数量：
-   - "Hello, world!"
-   - 一段 500 字的中文文章
-   - 一个完整的 System Prompt（角色设定 + 规则 + 示例）
+用 `tiktoken` 计算以下场景的 token 数量和成本：
+1. 一个 500 字的中文 System Prompt
+2. 10 轮对话的总 token 数（包含格式开销）
+3. 同样的场景，分别用 gpt-4o 和 gpt-4o-mini 的成本差多少
 
-2. 计算一次典型对话（10 轮）的总 token 数量和成本
+```python
+# 消息的格式开销：每条消息 +3 tokens，name 字段 +1 token，回复 +3 tokens
+def count_messages_tokens(messages, model="gpt-4o"):
+    encoding = tiktoken.encoding_for_model(model)
+    total = 3  # 回复开销
+    for msg in messages:
+        total += 3  # 每条消息开销
+        for key, value in msg.items():
+            total += len(encoding.encode(value))
+    return total
+```
 
-### 练习 2：LLM 客户端
+### 练习 2：封装带重试的 LLM 客户端
 
-实现 `LLMClient` 类：
+实现 `LLMClient` 类，要求：
+- `asyncio.Semaphore` 控制并发
+- 指数退避处理速率限制
+- 返回结构化结果（content、tokens、cost、latency）
 
-1. 支持 OpenAI 和 Anthropic 两个 provider
-2. 包含速率限制（信号量）
-3. 包含重试逻辑（指数退避）
-4. 返回结构化的调用结果（token 用量、成本、延迟）
+测试：并发发 50 个请求，验证信号量限制了并发数，速率限制时自动退避重试。
 
 ### 练习 3：错误模拟
 
-1. 用无效 API Key 调用，验证错误处理
-2. 快速发送 100 个请求，验证速率限制
-3. 发送超长消息，验证错误处理
+1. 用无效 API Key 调用，验证 `AuthenticationError` 被正确捕获
+2. 发送超长消息（超过上下文窗口），验证错误处理
+3. 快速发 100 个请求，观察速率限制和重试行为
 
----
+## 关键判断
 
-## 参考答案
-
-### 练习 1
-
-**思路**：用 `tiktoken` 库计算 token 数量，注意中文大约 1 字 ≈ 1.5-2 个 token，消息列表还要加上格式开销。
-
-**答案**：
-
-```python
-import tiktoken
-
-def count_tokens(text: str, model: str = "gpt-4o") -> int:
-    encoding = tiktoken.encoding_for_model(model)
-    return len(encoding.encode(text))
-
-def count_messages_tokens(messages: list[dict], model: str = "gpt-4o") -> int:
-    encoding = tiktoken.encoding_for_model(model)
-    tokens_per_message = 3
-    tokens_per_name = 1
-    total = 0
-    for msg in messages:
-        total += tokens_per_message
-        for key, value in msg.items():
-            total += len(encoding.encode(value))
-            if key == "name":
-                total += tokens_per_name
-    total += 3
-    return total
-
-def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
-    pricing = {
-        "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    }
-    p = pricing.get(model, {"input": 0, "output": 0})
-    return (input_tokens * p["input"] + output_tokens * p["output"]) / 1_000_000
-
-# 1. 计算不同文本的 token 数量
-texts = [
-    "Hello, world!",
-    "人工智能是计算机科学的一个分支，它企图了解智能的实质，并生产出一种新的能以人类智能相似的方式做出反应的智能机器。" * 5,
-    """你是一个专业的客服助手。
-# 规则
-- 回答必须基于知识库
-- 不确定时说"我不确定"
-- 回答不超过 200 字
-# 示例
-用户：你们的产品多少钱？
-助手：我们有三个版本：基础版 99 元/月，专业版 299 元/月，企业版联系我们获取报价。""",
-]
-
-for i, text in enumerate(texts):
-    tokens = count_tokens(text)
-    print(f"文本 {i+1}: {len(text)} 字符, {tokens} tokens")
-
-# 2. 计算 10 轮对话的 token 和成本
-system_msg = {"role": "system", "content": "你是一个有帮助的 AI 助手。"}
-messages = [system_msg]
-for i in range(10):
-    messages.append({"role": "user", "content": f"这是第 {i+1} 个问题，请简短回答。"})
-    messages.append({"role": "assistant", "content": f"这是第 {i+1} 个回答，希望对你有帮助。"})
-
-total_tokens = count_messages_tokens(messages)
-print(f"\n10 轮对话: {total_tokens} tokens")
-print(f"假设输出 500 tokens, gpt-4o 成本: ${calculate_cost('gpt-4o', total_tokens, 500):.4f}")
-print(f"假设输出 500 tokens, gpt-4o-mini 成本: ${calculate_cost('gpt-4o-mini', total_tokens, 500):.4f}")
-```
-
-**要点**：
-- 中文大约 1 个字 ≈ 1.5-2 个 token，英文大约 1 个单词 ≈ 1 个 token
-- `tiktoken` 只能计算 OpenAI 模型的 token，Anthropic 模型需要用 `anthropic` SDK 自带的 tokenizer
-- 常见错误：只计算了用户输入的 token，忽略了 system prompt 和消息格式开销
-
-### 练习 2
-
-**思路**：封装 LLMClient 类，用 `asyncio.Semaphore` 控制并发，用指数退避处理速率限制，返回包含 token 用量和成本的结构化结果。
-
-**答案**：
-
-```python
-import asyncio
-import time
-from dataclasses import dataclass
-from openai import AsyncOpenAI, RateLimitError, APITimeoutError, APIConnectionError
-
-@dataclass
-class LLMResult:
-    content: str
-    model: str
-    input_tokens: int
-    output_tokens: int
-    cost: float
-    latency: float
-
-class LLMClient:
-    def __init__(self, max_concurrent: int = 10):
-        self.client = AsyncOpenAI()
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-
-    async def call(
-        self,
-        messages: list[dict],
-        model: str = "gpt-4o",
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        max_retries: int = 3,
-    ) -> LLMResult:
-        for attempt in range(max_retries):
-            try:
-                start = time.perf_counter()
-                async with self.semaphore:
-                    response = await self.client.chat.completions.create(
-                        model=model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    )
-                latency = time.perf_counter() - start
-
-                usage = response.usage
-                pricing = {"gpt-4o": {"input": 2.5, "output": 10.0}, "gpt-4o-mini": {"input": 0.15, "output": 0.6}}
-                p = pricing.get(model, {"input": 0, "output": 0})
-                cost = (usage.prompt_tokens * p["input"] + usage.completion_tokens * p["output"]) / 1_000_000
-
-                return LLMResult(
-                    content=response.choices[0].message.content,
-                    model=response.model,
-                    input_tokens=usage.prompt_tokens,
-                    output_tokens=usage.completion_tokens,
-                    cost=cost,
-                    latency=latency,
-                )
-
-            except RateLimitError:
-                wait_time = 2 ** attempt
-                print(f"速率限制，等待 {wait_time}s 后重试...")
-                await asyncio.sleep(wait_time)
-
-            except (APITimeoutError, APIConnectionError) as e:
-                if attempt == max_retries - 1:
-                    raise
-                await asyncio.sleep(1)
-
-        raise Exception("Max retries exceeded")
-```
-
-```python
-# 测试
-async def test_llm_client():
-    client = LLMClient(max_concurrent=5)
-    result = await client.call(
-        messages=[{"role": "user", "content": "用一句话解释什么是 API"}],
-        model="gpt-4o-mini",
-    )
-    print(f"回答: {result.content}")
-    print(f"Token: {result.input_tokens} + {result.output_tokens}")
-    print(f"成本: ${result.cost:.6f}")
-    print(f"延迟: {result.latency:.2f}s")
-
-asyncio.run(test_llm_client())
-```
-
-**要点**：
-- `asyncio.Semaphore` 限制并发请求数，避免同时发起太多请求触发速率限制
-- 指数退避（`2 ** attempt`）让重试间隔递增，给 API 服务恢复的时间
-- 常见错误：用固定间隔重试（如每次都等 1 秒），在限流时会加剧问题
-
-### 练习 3
-
-**思路**：分别用无效 Key、高频请求、超长消息触发不同类型的错误，验证错误处理逻辑。
-
-**答案**：
-
-```python
-import asyncio
-from openai import AsyncOpenAI
-
-async def test_error_handling():
-    # 1. 无效 API Key
-    print("=== 测试无效 API Key ===")
-    bad_client = AsyncOpenAI(api_key="sk-invalid-key")
-    try:
-        await bad_client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": "test"}],
-        )
-    except Exception as e:
-        print(f"错误类型: {type(e).__name__}")
-        print(f"错误信息: {e}")
-
-    # 2. 速率限制（快速发送大量请求）
-    print("\n=== 测试速率限制 ===")
-    client = AsyncOpenAI()
-    semaphore = asyncio.Semaphore(20)
-    async def single_request(i: int):
-        try:
-            async with semaphore:
-                await client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": f"请求 {i}: 说一个字"}],
-                    max_tokens=5,
-                )
-            return "成功"
-        except Exception as e:
-            return f"{type(e).__name__}: {str(e)[:50]}"
-
-    results = await asyncio.gather(*[single_request(i) for i in range(100)])
-    rate_limited = sum(1 for r in results if "RateLimitError" in r)
-    print(f"100 个请求中被限流: {rate_limited} 个")
-
-    # 3. 超长消息
-    print("\n=== 测试超长消息 ===")
-    long_text = "请总结以下内容：" + "这是一段很长的文本。" * 10000
-    try:
-        await client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": long_text}],
-        )
-    except Exception as e:
-        print(f"错误类型: {type(e).__name__}")
-        print(f"错误信息: {str(e)[:100]}")
-
-asyncio.run(test_error_handling())
-```
-
-**要点**：
-- 无效 Key 会抛出 `AuthenticationError`，应该提示用户联系管理员检查配置
-- 超长消息会抛出 `BadRequestError`（context window exceeded），应该截断历史或压缩上下文
-- 常见错误：所有异常都用同一个 catch 处理，没有区分可重试错误和不可重试错误
-
-## 本节要点
-
-- Token 不等于字符，中文大约 1 个字 ≈ 1.5-2 个 token
-- 成本控制从 token 计算开始，每天统计成本是必须的
-- 速率限制是 LLM API 的常态，必须实现重试和退避
-- 统一的调用封装让切换模型变得简单
-
-## 常见误区
-
-| 错误 | 原因 | 解决 |
-|------|------|------|
-| `AuthenticationError` | API Key 无效或过期 | 检查环境变量中的 API Key |
-| `RateLimitError` | 超出速率限制 | 实现指数退避重试 |
-| `ContextWindowExceeded` | 消息超出上下文窗口 | 压缩历史或截断消息 |
-| 成本飙升 | 没有 token 统计和限制 | 加入 token 计数和配额控制 |
-
-## 工程建议
-
-- 封装统一的 LLM 调用层，业务代码不直接调用 OpenAI/Anthropic SDK，方便切换模型和统一错误处理
-- 速率限制重试必须使用指数退避（exponential backoff），不要用固定间隔重试，否则会加剧限流
-- 每日 token 用量和成本统计是生产必备，建议写入数据库并设置告警阈值
-- 生产环境 LLM 调用要记录完整的请求日志（prompt、response、token、延迟），方便排查问题和优化成本
-- 不同场景配置不同模型：简单分类用便宜模型，复杂推理用强模型，能显著降低整体成本
+- **什么时候用强模型，什么时候用便宜模型？** 意图分类、格式转换、简单问答用 gpt-4o-mini；复杂推理、长文生成、代码分析用 gpt-4o。成本差 10 倍，简单任务用强模型是浪费。
+- **Token 统计必须从第一天就开始。** 不统计 token 就不知道成本，不知道成本就没法做预算。
+- **重试策略必须用指数退避。** 固定间隔重试在限流场景下会让问题更严重——所有请求同时重试，再次触发限流。

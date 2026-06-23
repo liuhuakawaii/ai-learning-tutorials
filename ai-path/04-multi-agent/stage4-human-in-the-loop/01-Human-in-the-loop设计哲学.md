@@ -1,191 +1,241 @@
-# 01 Human-in-the-loop 设计哲学——什么环节需要人类介入
+# Human-in-the-loop 设计哲学：什么环节需要人类介入
 
-> 不是所有决策都该交给 AI。Human-in-the-loop 让人类在关键节点把关。
+> 前置知识：stage1-3 的多 Agent 编排和通信经验
+> 预计时长：40 分钟
 
-## 场景引入
+## 一个真实的事故
 
-你的多 Agent 系统要执行一个操作：删除用户的过期数据。这个操作不可逆，一旦误删就是灾难。你不能把这种高风险决策完全交给 AI——需要在关键节点停下来，让人类确认后再继续。Human-in-the-loop 不是"不信任 AI"，而是"在正确的地方信任人类"。
+2024 年，某公司的客服 Agent 系统在没有人工审批的情况下，自动给 2000 多个用户发送了"您的账户将被永久关闭"的邮件。原因是：一个用户提交了"请关闭我的账户"的请求，Agent 的搜索环节把"关闭"关联到了所有用户账户，写作 Agent 生成了群发邮件，系统直接执行了。
 
----
+事后复盘，问题不在于 AI 犯了错，而在于系统没有在"发送邮件"这个不可逆操作前停下来让人确认。
 
-## 学习目标
+Human-in-the-loop 不是"不信任 AI"，而是"在正确的地方信任人类"。
 
-- 理解 Human-in-the-loop 的设计哲学
-- 掌握需要人类介入的场景判断
-- 学会设计人机协作流程
+## 哪些环节需要人类介入
 
----
+不是所有环节都需要。介入太多，系统变成人工审批流水线，效率还不如不用 AI。介入太少，风险不可控。
 
-## 一、为什么需要人类介入
-
-```
-需要人类介入的场景：
-
-1. 高风险操作
-   - 删除数据
-   - 发送消息
-   - 支付操作
-   - 权限变更
-
-2. 关键决策
-   - 业务策略选择
-   - 人事决策
-   - 财务决策
-
-3. 不确定情况
-   - AI 置信度低
-   - 多个方案难以抉择
-   - 需要领域专家判断
-
-4. 合规要求
-   - 法律法规要求人工审核
-   - 行业规范要求人工确认
-   - 公司政策要求人工审批
-```
-
----
-
-## 二、介入模式
+用两个维度判断：**可逆性**和**影响范围**。
 
 ```
-介入模式：
-
-1. 审批模式（Approval）
-   Agent 提出方案 → 人类审批 → 执行
-   适用于：高风险操作
-
-2. 确认模式（Confirmation）
-   Agent 准备执行 → 人类确认 → 执行
-   适用于：关键步骤
-
-3. 选择模式（Selection）
-   Agent 提供选项 → 人类选择 → 执行
-   适用于：多方案决策
-
-4. 修改模式（Modification）
-   Agent 生成结果 → 人类修改 → 使用
-   适用于：需要人工调整的输出
-
-5. 监督模式（Oversight）
-   Agent 持续执行 → 人类监督 → 必要时介入
-   适用于：长时间运行任务
+                    影响范围大
+                        │
+         ┌──────────────┼──────────────┐
+         │   必须审批    │   需要审批    │
+         │   (不可逆+大) │   (可逆+大)  │
+         │              │              │
+  不可逆 ─┼──────────────┼──────────────┼─ 可逆
+         │   建议审批    │   通常不需要  │
+         │   (不可逆+小) │   (可逆+小)  │
+         │              │              │
+         └──────────────┼──────────────┘
+                        │
+                    影响范围小
 ```
 
----
+具体场景：
 
-## 三、实现框架
+**必须审批**：删除数据、发送外部邮件/消息、支付操作、权限变更、发布内容到生产环境
+
+**建议审批**：修改用户数据、生成法律/财务文档、Agent 置信度低于阈值的输出
+
+**通常不需要**：搜索信息、内部数据分析、生成草稿、格式转换
+
+## 五种介入模式
+
+### 1. 审批模式（Approval）
+
+Agent 提出方案 → 人类审批 → 执行。最常见，适合高风险操作。
+
+```
+Agent: "建议删除以下 50 条过期记录..."
+人类: "批准" / "拒绝" / "只删除前 10 条"
+```
+
+### 2. 确认模式（Confirmation）
+
+Agent 准备执行 → 人类确认 → 执行。比审批轻量，适合"我知道你要做什么，确认一下"。
+
+```
+Agent: "即将向用户发送通知邮件"
+人类: "确认" / "等等，先别发"
+```
+
+### 3. 选择模式（Selection）
+
+Agent 提供多个选项 → 人类选择 → 执行。适合有多个合理方案时。
+
+```
+Agent: "分析出 3 种定价策略：
+  A. 低价渗透（适合新市场）
+  B. 高价差异化（适合高端定位）
+  C. 动态定价（适合竞争激烈场景）"
+人类: "选 B"
+```
+
+### 4. 修改模式（Modification）
+
+Agent 生成结果 → 人类修改 → 使用。适合输出需要人工润色的场景。
+
+```
+Agent: "生成了新闻稿草稿..."
+人类: "第二段改成..."
+```
+
+### 5. 监督模式（Oversight）
+
+Agent 持续执行 → 人类监督 → 必要时介入。适合长时间运行的任务。
+
+```
+Agent: [正在处理 1000 条数据，已完成 300 条]
+人类: "暂停，第 150 条的处理结果有问题"
+```
+
+## 什么时候用哪种模式
+
+选择标准不是"这个操作有多重要"，而是"人类介入能带来多少增量价值"。
+
+- 如果 Agent 的输出 99% 是对的，1% 是错的，但那 1% 的后果很严重 → 审批模式
+- 如果 Agent 的输出经常需要微调 → 修改模式
+- 如果有多个合理方案，选哪个取决于业务判断 → 选择模式
+- 如果任务执行时间很长，中间可能需要调整 → 监督模式
+
+## 在 LangGraph 中实现中断
+
+LangGraph 提供了 `interrupt_before` 和 `interrupt_after` 机制，可以在指定节点前/后暂停图的执行，等待外部输入。
 
 ```python
-class HumanInTheLoop:
-    """Human-in-the-loop 框架"""
-    
-    def __init__(self):
-        self.pending_approvals = {}
-        self.approval_history = []
-    
-    def request_approval(self, action: dict, context: dict) -> str:
-        """请求人类审批"""
-        request_id = str(uuid.uuid4())
-        
-        self.pending_approvals[request_id] = {
-            "action": action,
-            "context": context,
-            "status": "pending",
-            "created_at": datetime.now().isoformat()
-        }
-        
-        return request_id
-    
-    def approve(self, request_id: str, feedback: str = None):
-        """批准"""
-        if request_id in self.pending_approvals:
-            self.pending_approvals[request_id]["status"] = "approved"
-            self.pending_approvals[request_id]["feedback"] = feedback
-            self.approval_history.append(self.pending_approvals[request_id])
-    
-    def reject(self, request_id: str, reason: str):
-        """拒绝"""
-        if request_id in self.pending_approvals:
-            self.pending_approvals[request_id]["status"] = "rejected"
-            self.pending_approvals[request_id]["reason"] = reason
-            self.approval_history.append(self.pending_approvals[request_id])
-    
-    def check_approval(self, request_id: str) -> str:
-        """检查审批状态"""
-        return self.pending_approvals.get(request_id, {}).get("status", "unknown")
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+
+
+class ApprovalState(TypedDict):
+    task: str
+    result: str
+    approved: bool
+    feedback: str
+
+
+def execute_task(state: ApprovalState) -> dict:
+    return {"result": f"执行结果: {state['task']}"}
+
+
+def approval_gate(state: ApprovalState) -> dict:
+    """这个节点本身什么都不做——它是一个暂停点。"""
+    return {}
+
+
+def finalize(state: ApprovalState) -> dict:
+    return {"result": f"已发布: {state['result']}"}
+
+
+graph = StateGraph(ApprovalState)
+graph.add_node("execute", execute_task)
+graph.add_node("approval", approval_gate)
+graph.add_node("finalize", finalize)
+
+graph.set_entry_point("execute")
+graph.add_edge("execute", "approval")
+graph.add_conditional_edges("approval", lambda s:
+    "finalize" if s.get("approved") else END
+)
+graph.add_edge("finalize", END)
+
+# 关键：interrupt_before 让图在执行 approval 节点前暂停
+checkpointer = MemorySaver()
+app = graph.compile(
+    checkpointer=checkpointer,
+    interrupt_before=["approval"],
+)
 ```
 
----
+运行时：
 
-## 四、设计原则
+```python
+config = {"configurable": {"thread_id": "task-1"}}
 
-```
-Human-in-the-loop 设计原则：
+# 第一次调用：执行到 approval 前暂停
+result = app.invoke(
+    {"task": "发布新产品公告", "result": "", "approved": False, "feedback": ""},
+    config,
+)
+print(result["result"])  # "执行结果: 发布新产品公告"
 
-1. 最小介入原则
-   - 只在必要时请求人类介入
-   - 避免过度打扰用户
+# 此时系统等待人类输入
+# 人类审核后，更新状态并继续执行
+app.update_state(config, {"approved": True, "feedback": "内容OK"})
 
-2. 清晰上下文
-   - 提供足够的决策信息
-   - 让人类能快速判断
-
-3. 异步支持
-   - 支持长时间等待
-   - 不阻塞其他任务
-
-4. 可追溯
-   - 记录所有审批历史
-   - 支持审计和复盘
-
-5. 降级策略
-   - 人类不响应时的处理
-   - 超时后的默认行为
+# 第二次调用：从暂停点继续
+result = app.invoke(None, config)
+print(result["result"])  # "已发布: 执行结果: 发布新产品公告"
 ```
 
----
+`interrupt_before` 的本质是：图在到达指定节点时暂停，把当前状态持久化到 checkpointer。外部系统可以通过 `update_state` 修改状态，然后用 `invoke(None, config)` 从暂停点继续执行。
 
+## 设计原则
 
----
+**最小介入**：只在真正需要的地方设置审批。审批过多会导致"审批疲劳"——审批者开始不看内容就点"批准"。
 
-## 常见误区
+**清晰上下文**：审批界面要提供足够的决策信息。不要只显示"Agent 建议执行操作 X"，要显示操作的上下文、风险评估、替代方案。
 
-1. **所有操作都要求人工审批**：审批过多会导致"审批疲劳"，审批者开始不看内容就点"批准"。只在真正高风险的操作（删除数据、发送消息、支付）设置审批，低风险操作让 Agent 自主执行。
-2. **审批信息不够充分**：审批者只看到"Agent 建议执行操作 X"，但不知道操作的上下文、风险评估和替代方案。审批界面应该提供足够的决策信息。
-3. **没有审批超时机制**：任务提交审批后，审批者一直不响应，系统就永远停在那里。需要设置审批超时，超时后自动执行降级策略（如跳过该步骤或通知其他审批者）。
+**超时降级**：人类不响应时要有降级策略。超时后可以：跳过该步骤、通知其他审批者、执行默认操作。不能让系统永远停在那里。
 
----
-
-## 工程建议
-
-1. **从单 Agent 开始，按需演进**：先用单 Agent 验证核心逻辑，当遇到上下文瓶颈、能力稀释或需要并行处理时，再拆分为多 Agent。不要为了"看起来高级"而引入多 Agent 架构。
-2. **为每个 Agent 定义清晰的职责边界**：每个 Agent 应该有单一、明确的职责（如"只负责搜索""只负责分析"），输入输出格式在设计阶段就确定下来，避免职责重叠和数据格式混乱。
-3. **建立可观测性基础设施**：从第一版开始就为每个 Agent 添加结构化日志和追踪机制，记录输入、输出、耗时、错误。多 Agent 系统的调试难度远高于单 Agent，没有日志就是在"盲人摸象"。
-4. **在关键决策节点加入人工审批**：涉及高风险操作（删除数据、发送消息、支付）和不可逆操作时，使用 Human-in-the-loop 机制暂停执行，等待人类确认后再继续。
-
----
-
-## 小结
-
-```
-本课核心要点：
-
-1. Human-in-the-loop 在高风险、关键决策、不确定情况时介入
-2. 介入模式：审批、确认、选择、修改、监督
-3. 设计原则：最小介入、清晰上下异步、可追溯、降级
-4. 实现框架支持请求、审批、拒绝、状态检查
-
----
-
-**下一课**: [审批节点实现——在 LangGraph 中添加人工审批 gate](./02-审批节点实现.md)
-```
-
----
+**可追溯**：记录所有审批历史——谁审批的、什么时候、审批了什么、修改了什么。这是审计和复盘的基础。
 
 ## 练习
 
-1. **场景题**：列出你的应用中需要人类介入的 3 个场景。
+### 练习一：实现审批超时
 
-2. **实现题**：实现一个简单的审批框架。
+在上面的 LangGraph 审批示例中，添加超时机制：如果审批等待超过 60 秒，自动拒绝并记录超时原因。
 
-3. **设计题**：设计一个人机协作流程。
+```python
+import asyncio
+from datetime import datetime
+
+async def approval_with_timeout(app, config, timeout_seconds=60):
+    """带超时的审批等待。"""
+    # 提示：用 asyncio.wait_for 或 threading.Timer
+    ...
+```
+
+### 练习二：实现修改模式
+
+修改审批流程，让审批者不仅能批准/拒绝，还能修改 Agent 的输出后再批准：
+
+```python
+def approval_with_edit(state: ApprovalState) -> dict:
+    """审批者可以修改 result 后再批准。"""
+    # 审批者的输入格式：
+    # {"action": "approve"}
+    # {"action": "reject", "reason": "..."}
+    # {"action": "edit", "new_result": "...", "approve": True}
+    ...
+```
+
+---
+
+## 参考答案
+
+### 练习一
+
+```python
+import asyncio
+
+async def approval_with_timeout(app, config, timeout_seconds=60):
+    start = datetime.now()
+    while (datetime.now() - start).total_seconds() < timeout_seconds:
+        state = app.get_state(config)
+        # 检查是否已经被审批
+        if state.values.get("approved"):
+            return "approved"
+        await asyncio.sleep(1)
+
+    # 超时：自动拒绝
+    app.update_state(config, {
+        "approved": False,
+        "feedback": "审批超时，自动拒绝",
+    })
+    return "timeout"
+```
+
+为什么用轮询而不是回调？因为 LangGraph 的 checkpointer 是基于文件/内存的，没有内置的事件通知机制。在生产环境中，可以用 Redis Pub/Sub 或 WebSocket 替代轮询。

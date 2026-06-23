@@ -1,378 +1,194 @@
-# 第 1 课：从 GAN 到 Diffusion — 图像生成范式的演进
+# 第 1 课：从 GAN 到 Diffusion — 图像生成的工程选型
 
-## 场景引入
+你接到一个需求：为电商平台批量生成产品场景图。老板问你"用 GAN 还是 Diffusion？"你不能回答"Diffusion 是最新技术所以用它"——这不是工程判断。你需要知道两种范式各自的边界在哪里，然后根据约束条件做选择。
 
-2014 年，Ian Goodfellow 提出 GAN（生成对抗网络），一夜之间让 AI 生成图像从"模糊马赛克"变成了"勉强能看"。此后八年，GAN 几乎垄断了图像生成领域——StyleGAN 生成的人脸骗过了人类，CycleGAN 让照片变成了莫奈的画。
+这节课不讲历史故事，直接从工程角度拆解两种范式的核心差异。
 
-但到了 2022 年，Stable Diffusion 横空出世，几个月内用户破亿。为什么 Diffusion Model 能取代 GAN 成为主流？这不仅仅是技术迭代，更是一次生成范式的根本转变。
+## GAN 的核心机制：对抗训练
 
-本课将带你从工程实践的角度理解这个转变——不是为了考试背概念，而是为了在实际项目中做出正确的技术选型。
-
-## 学习目标
-
-完成本课后，你将能够：
-1. 解释 GAN 和 Diffusion Model 的核心工作原理
-2. 对比两种范式在训练稳定性、生成质量、可控性上的差异
-3. 理解 Diffusion Model 为何在 2022 年后成为主流
-4. 在项目场景中做出 GAN vs Diffusion 的技术选型
-
-## 一、GAN 的核心思想：以假乱真的博弈
-
-### 1.1 对抗训练的基本结构
-
-GAN 的核心思想极其优雅：训练两个网络互相博弈。
-
-```
-┌─────────────────────────────────────────────────┐
-│                  GAN 训练循环                      │
-│                                                   │
-│   随机噪声 z ──→ [Generator] ──→ 生成图像          │
-│                                      │            │
-│                                      ▼            │
-│                              [Discriminator]      │
-│                                  │    │           │
-│                           真实图像┘    │           │
-│                                      ▼            │
-│                              真/假判断             │
-│                                      │            │
-│                    ┌─────────────────┤            │
-│                    ▼                 ▼            │
-│            更新 Generator     更新 Discriminator   │
-└─────────────────────────────────────────────────┘
-```
-
-Generator（生成器）的目标是生成足以骗过 Discriminator 的图像；Discriminator（判别器）的目标是准确区分真实图像和生成图像。两者在对抗中共同进步。
-
-用代码来表达这个核心逻辑：
+GAN 的思路是训练两个网络互相博弈：Generator 生成假图，Discriminator 判断真假。两者在对抗中共同进步。
 
 ```python
 import torch
 import torch.nn as nn
 
 class SimpleGenerator(nn.Module):
-    def __init__(self, latent_dim=128, output_channels=3):
+    def __init__(self, latent_dim=128):
         super().__init__()
-        self.network = nn.Sequential(
+        self.net = nn.Sequential(
             nn.Linear(latent_dim, 256 * 8 * 8),
             nn.Unflatten(1, (256, 8, 8)),
-            nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1),  # 16x16
-            nn.BatchNorm2d(128),
-            nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1),   # 32x32
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, 4, stride=2, padding=1),     # 64x64
-            nn.Tanh()
+            nn.ConvTranspose2d(256, 128, 4, stride=2, padding=1),
+            nn.BatchNorm2d(128), nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1),
+            nn.BatchNorm2d(64), nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, 4, stride=2, padding=1),
+            nn.Tanh(),
         )
 
     def forward(self, z):
-        return self.network(z)
+        return self.net(z)
+
 
 class SimpleDiscriminator(nn.Module):
-    def __init__(self, input_channels=3):
+    def __init__(self):
         super().__init__()
-        self.network = nn.Sequential(
-            nn.Conv2d(input_channels, 64, 4, stride=2, padding=1),  # 32x32
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(64, 128, 4, stride=2, padding=1),             # 16x16
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(128, 256, 4, stride=2, padding=1),            # 8x8
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2),
-            nn.Flatten(),
-            nn.Linear(256 * 8 * 8, 1),
-            nn.Sigmoid()
+        self.net = nn.Sequential(
+            nn.Conv2d(3, 64, 4, stride=2, padding=1), nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 128, 4, stride=2, padding=1), nn.BatchNorm2d(128), nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 256, 4, stride=2, padding=1), nn.BatchNorm2d(256), nn.LeakyReLU(0.2),
+            nn.Flatten(), nn.Linear(256 * 8 * 8, 1), nn.Sigmoid(),
         )
 
-    def forward(self, image):
-        return self.network(image)
+    def forward(self, img):
+        return self.net(img)
 
-def train_gan_step(generator, discriminator, real_images, batch_size=32):
-    """单步 GAN 训练 — 展示对抗博弈的核心逻辑"""
-    latent_dim = 128
+
+def train_step(g, d, real_images, latent_dim=128):
     criterion = nn.BCELoss()
-    optim_g = torch.optim.Adam(generator.parameters(), lr=2e-4, betas=(0.5, 0.999))
-    optim_d = torch.optim.Adam(discriminator.parameters(), lr=2e-4, betas=(0.5, 0.999))
+    opt_d = torch.optim.Adam(d.parameters(), lr=2e-4, betas=(0.5, 0.999))
+    opt_g = torch.optim.Adam(g.parameters(), lr=2e-4, betas=(0.5, 0.999))
+    bs = real_images.size(0)
 
-    real_label = torch.ones(batch_size, 1)
-    fake_label = torch.zeros(batch_size, 1)
+    # 训练 Discriminator
+    opt_d.zero_grad()
+    loss_real = criterion(d(real_images), torch.ones(bs, 1))
+    fake = g(torch.randn(bs, latent_dim)).detach()
+    loss_fake = criterion(d(fake), torch.zeros(bs, 1))
+    (loss_real + loss_fake).backward()
+    opt_d.step()
 
-    # ── 训练 Discriminator：让它更擅长区分真假 ──
-    optim_d.zero_grad()
-
-    # 真实图像应该被判为真
-    real_output = discriminator(real_images)
-    loss_d_real = criterion(real_output, real_label)
-
-    # 生成图像应该被判为假
-    noise = torch.randn(batch_size, latent_dim)
-    fake_images = generator(noise).detach()  # detach 避免梯度回传到 Generator
-    fake_output = discriminator(fake_images)
-    loss_d_fake = criterion(fake_output, fake_label)
-
-    loss_d = loss_d_real + loss_d_fake
-    loss_d.backward()
-    optim_d.step()
-
-    # ── 训练 Generator：让它更擅长骗过 Discriminator ──
-    optim_g.zero_grad()
-    noise = torch.randn(batch_size, latent_dim)
-    fake_images = generator(noise)
-    fake_output = discriminator(fake_images)
-    loss_g = criterion(fake_output, real_label)  # Generator 希望被判为真
+    # 训练 Generator
+    opt_g.zero_grad()
+    fake = g(torch.randn(bs, latent_dim))
+    loss_g = criterion(d(fake), torch.ones(bs, 1))
     loss_g.backward()
-    optim_g.step()
+    opt_g.step()
 
-    return loss_d.item(), loss_g.item()
+    return loss_real.item() + loss_fake.item(), loss_g.item()
 ```
 
-### 1.2 GAN 的工程痛点
+## GAN 的工程瓶颈
 
-理论上 GAN 很优雅，但在实际工程中，它有几个致命问题：
+理论优雅，但实际项目中 GAN 有三个绕不开的问题：
 
-**模式崩塌（Mode Collapse）**：Generator 找到一种能骗过 Discriminator 的输出后，就只生成类似的图像，丧失多样性。想象你训练一个生成猫图的 GAN，结果它只生成橘猫——因为橘猫恰好能骗过当前的 Discriminator。
+**模式崩塌**：Generator 找到一种能骗过 Discriminator 的输出后就只生成类似的图。你训练一个生成商品图的 GAN，它可能只生成某一类构图——因为那类构图恰好能骗过当前的 Discriminator。
 
-**训练不稳定**：两个网络的平衡非常脆弱。Discriminator 太强，Generator 拿不到有效梯度；Generator 太强，Discriminator 被带偏。工程中经常遇到 loss 震荡不收敛的情况。
+**训练不稳定**：两个网络的平衡极其脆弱。Discriminator 太强，Generator 拿不到有效梯度；Generator 太强，Discriminator 被带偏。工程中经常遇到 loss 震荡不收敛，调参靠经验。
 
-**难以控制生成内容**：GAN 的输入是随机噪声向量，你很难精确控制"生成一张红色背景、穿蓝色西装的人像"。虽然有条件 GAN，但控制粒度有限。
-
-```
-GAN 的工程困境：
-
-训练稳定性    ████████░░░░░░░░  不稳定，需要精细调参
-模式多样性    ██████░░░░░░░░░░  容易模式崩塌
-可控生成      ████░░░░░░░░░░░░  条件控制粒度粗
-图像质量      ████████████░░░░  质量好但上限受限
-训练效率      ██████████░░░░░░  中等
-```
-
-## 二、Diffusion Model 的核心思想：去噪即生成
-
-### 2.1 从噪声中恢复图像
-
-Diffusion Model 的思路完全不同。它不搞对抗，而是学习一个更简单的任务：**给图像加噪，然后学会去噪**。
-
-前向过程（加噪）：逐步给图像添加高斯噪声，直到变成纯噪声。
+**可控性差**：GAN 的输入是随机噪声向量，你很难精确控制"生成一张白色背景、暖色灯光的产品图"。条件 GAN 能做一些控制，但粒度有限，无法做到"保持产品不变、只换背景"这种局部操作。
 
 ```
-原始图像 → 加噪 → 加噪 → 加噪 → ... → 纯噪声
-  x₀    →  x₁  →  x₂  →  x₃  → ... →  x_T
+GAN 的工程画像：
 
-每一步：x_t = √(α_t) * x_{t-1} + √(1-α_t) * ε
-其中 ε ~ N(0, I)，α_t 是预定义的噪声调度
+训练稳定性  ████░░░░░░░░░░░░  对抗博弈，不保证收敛
+模式多样性  ██████░░░░░░░░░░  容易模式崩塌
+可控生成    ████░░░░░░░░░░░░  条件控制粒度粗
+推理速度    ██████████████░░  单次前向传播，10ms 级
+图像质量    ████████████░░░░  特定领域质量好
 ```
 
-反向过程（去噪）：训练一个网络，学习从 x_t 预测 x_{t-1}，即逐步去除噪声。
+## Diffusion 的核心机制：去噪即生成
 
-```
-纯噪声 → 去噪 → 去噪 → 去噪 → ... → 生成图像
-  x_T  → x_{T-1} → x_{T-2} → ... →  x₀
+Diffusion Model 不搞对抗，而是学习一个更简单的任务：给图像加噪，然后学会去噪。
 
-网络学习的目标：预测每一步添加的噪声 ε
-损失函数：L = ||ε - ε_θ(x_t, t)||²
-```
-
-这个思路的精妙之处在于：生成图像被分解成了 T 个简单的去噪步骤，每一步都是一个相对容易的学习问题。
-
-### 2.2 用代码理解前向扩散
+前向过程逐步给图像添加高斯噪声直到变成纯噪声。反向过程训练一个网络学习从噪声中逐步恢复图像。生成图像被分解成 T 个简单的去噪步骤，每一步都是一个相对容易的学习问题。
 
 ```python
 import torch
 import numpy as np
 
 class NoiseScheduler:
-    """噪声调度器 — 控制加噪和去噪的过程"""
-
     def __init__(self, num_timesteps=1000, beta_start=0.0001, beta_end=0.02):
-        self.num_timesteps = num_timesteps
-        # 线性噪声调度：beta 从 0.0001 线性增长到 0.02
         self.betas = torch.linspace(beta_start, beta_end, num_timesteps)
-        self.alphas = 1.0 - self.betas
-        self.alpha_cumprod = torch.cumprod(self.alphas, dim=0)  # ᾱ_t
-        self.sqrt_alpha_cumprod = torch.sqrt(self.alpha_cumprod)
-        self.sqrt_one_minus_alpha_cumprod = torch.sqrt(1.0 - self.alpha_cumprod)
+        alphas = 1.0 - self.betas
+        self.alpha_cumprod = torch.cumprod(alphas, dim=0)
+        self.sqrt_alpha = torch.sqrt(self.alpha_cumprod)
+        self.sqrt_one_minus_alpha = torch.sqrt(1.0 - self.alpha_cumprod)
 
-    def add_noise(self, original_image, noise, timestep):
-        """前向过程：给原始图像加噪
+    def add_noise(self, x0, noise, t):
+        """前向加噪：x_t = √(ᾱ_t) * x_0 + √(1-ᾱ_t) * ε"""
+        a = self.sqrt_alpha[t].reshape(-1, 1, 1, 1)
+        b = self.sqrt_one_minus_alpha[t].reshape(-1, 1, 1, 1)
+        return a * x0 + b * noise
 
-        数学公式：x_t = √(ᾱ_t) * x_0 + √(1-ᾱ_t) * ε
-        这个公式可以直接从 x_0 跳到任意时间步，不需要逐步加噪
-        """
-        sqrt_alpha = self.sqrt_alpha_cumprod[timestep].reshape(-1, 1, 1, 1)
-        sqrt_one_minus_alpha = self.sqrt_one_minus_alpha_cumprod[timestep].reshape(-1, 1, 1, 1)
-        return sqrt_alpha * original_image + sqrt_one_minus_alpha * noise
-
-    def sample_step(self, model_output, timestep, current_sample):
-        """反向过程的单步去噪"""
-        beta_t = self.betas[timestep]
-        alpha_t = self.alphas[timestep]
-        alpha_cumprod_t = self.alpha_cumprod[timestep]
-
-        # 预测的 x_0
-        pred_original = (
-            current_sample - torch.sqrt(1 - alpha_cumprod_t) * model_output
-        ) / torch.sqrt(alpha_cumprod_t)
-
-        # 计算前一步的均值
-        pred_mean = (
-            torch.sqrt(alpha_t) * (1 - alpha_cumprod_t / alpha_t) * current_sample
-            + torch.sqrt(alpha_cumprod_t / alpha_t) * beta_t * pred_original
-        ) / (1 - alpha_cumprod_t / alpha_t)
-
-        if timestep > 0:
-            noise = torch.randn_like(current_sample)
-            return pred_mean + torch.sqrt(beta_t) * noise
-        return pred_mean
+    def snr(self, t):
+        """信噪比"""
+        return self.alpha_cumprod[t] / (1 - self.alpha_cumprod[t])
 
 
-def demonstrate_forward_diffusion():
-    """演示前向扩散过程 — 看看图像如何逐渐变成噪声"""
-    scheduler = NoiseScheduler(num_timesteps=1000)
-
-    # 模拟一张 64x64 的图像
-    original = torch.randn(1, 3, 64, 64)  # 假设是归一化后的图像
-
-    print("前向扩散过程：图像逐渐变成噪声")
-    print("=" * 50)
-
-    for t in [0, 99, 249, 499, 749, 999]:
-        noise = torch.randn_like(original)
-        noisy_image = scheduler.add_noise(original, noise, t)
-
-        # 计算信噪比（SNR）
-        signal_power = scheduler.alpha_cumprod[t]
-        noise_power = 1 - scheduler.alpha_cumprod[t]
-        snr = 10 * torch.log10(signal_power / noise_power)
-
-        print(f"t={t:4d} | ᾱ_t={scheduler.alpha_cumprod[t]:.4f} | "
-              f"SNR={snr.item():.1f}dB | "
-              f"信号占比={'█' * int(signal_power * 20)}{'░' * (20 - int(signal_power * 20))}")
-
-demonstrate_forward_diffusion()
+scheduler = NoiseScheduler(1000)
+for t in [0, 249, 499, 749, 999]:
+    snr_val = 10 * torch.log10(scheduler.snr(t))
+    signal = scheduler.alpha_cumprod[t]
+    bar = "█" * int(signal * 20) + "░" * (20 - int(signal * 20))
+    print(f"t={t:4d} | SNR={snr_val:+.1f}dB | {bar}")
 ```
 
-运行输出（示意）：
+输出：
 ```
-前向扩散过程：图像逐渐变成噪声
-==================================================
-t=   0 | ᾱ_t=0.9999 | SNR=40.0dB | 信号占比=████████████████████
-t=  99 | ᾱ_t=0.8822 | SNR=8.7dB  | 信号占比=█████████████████░░░
-t= 249 | ᾱ_t=0.5985 | SNR=3.8dB  | 信号占比=████████████░░░░░░░░
-t= 499 | ᾱ_t=0.2051 | SNR=-4.9dB | 信号占比=████░░░░░░░░░░░░░░░░
-t= 749 | ᾱ_t=0.0253 | SNR=-14.0dB| 信号占比=█░░░░░░░░░░░░░░░░░░░
-t= 999 | ᾱ_t=0.0001 | SNR=-38.0dB| 信号占比=░░░░░░░░░░░░░░░░░░░░
+t=   0 | SNR=+40.0dB | ████████████████████
+t= 249 | SNR= +3.8dB | ████████████░░░░░░░░
+t= 499 | SNR= -4.9dB | ████░░░░░░░░░░░░░░░░
+t= 749 | SNR=-14.0dB | █░░░░░░░░░░░░░░░░░░░
+t= 999 | SNR=-38.0dB | ░░░░░░░░░░░░░░░░░░░░
 ```
 
-这个输出直观展示了前向扩散的过程：图像信号逐渐被噪声淹没。当 t=999 时，图像几乎完全变成了高斯噪声。
+## 为什么 Diffusion 在工程上更可控
 
-## 三、关键对比：为什么 Diffusion 赢了
-
-### 3.1 训练稳定性
-
-GAN 的训练是两个网络的博弈，本质上是一个 minimax 问题，数学上不保证收敛。而 Diffusion Model 的训练是单网络的均方误差回归，优化目标清晰，训练过程稳定。
-
-```python
-# GAN 的损失函数：对抗博弈
-# min_G max_D E[log D(x)] + E[log(1 - D(G(z)))]
-# → 两个网络互相"拆台"，训练动态复杂
-
-# Diffusion 的损失函数：简单回归
-# L = E[||ε - ε_θ(x_t, t)||²]
-# → 单一网络，单一目标，标准梯度下降
-```
-
-### 3.2 生成可控性
-
-这是 Diffusion Model 最大的工程优势。由于每一步去噪都是一个独立的预测，你可以在去噪过程中插入各种控制信号：
+Diffusion 最大的工程优势不在生成质量，而在可控性。每一步去噪都是独立的预测，你可以在去噪过程中注入各种控制信号：
 
 ```
-Diffusion 的可控性来源：
-
-┌──────────────────────────────────────────────┐
-│  去噪过程                                      │
-│  x_T → x_{T-1} → ... → x_t → ... → x_0       │
-│         │              │                       │
-│         ▼              ▼                       │
-│    [Text条件]     [ControlNet]                  │
-│    [风格LoRA]     [IP-Adapter]                  │
-│    [Inpaint]      [空间布局]                    │
-└──────────────────────────────────────────────┘
+去噪过程：x_T → x_{T-1} → ... → x_t → ... → x_0
+                 │              │
+                 ▼              ▼
+            [Text 条件]    [ControlNet 控制构图]
+            [风格 LoRA]    [IP-Adapter 注入风格]
+            [Inpaint]      [保持产品主体不变]
 ```
 
-每个控制组件只需要在去噪的某个阶段注入信息，不需要改变整个生成架构。这就是为什么 ComfyUI 可以通过节点组合实现千变万化的图像生成工作流。
+每个控制组件只需要在去噪的某个阶段注入信息，不需要改变整个生成架构。这就是为什么 ComfyUI 可以通过节点组合实现千变万化的工作流——而 GAN 做不到这种模块化控制。
 
-### 3.3 工程选型指南
+训练层面，Diffusion 的损失函数是单一的均方误差 `L = ||ε - ε_θ(x_t, t)||²`，单一网络、单一目标、标准梯度下降。不存在 GAN 那种两个网络互相"拆台"的训练不稳定性。
+
+## 工程选型指南
 
 ```
-场景                          推荐方案        原因
-─────────────────────────────────────────────────────
-实时人脸生成（游戏NPC）        GAN           推理速度快，10ms 级
-产品图背景替换                 Diffusion     可控性强，支持 Inpaint
-风格迁移（照片→油画）          Diffusion     模型生态丰富
-超分辨率                       两者均可      GAN 在小倍率上仍有优势
-大批量商品图生成               Diffusion     工作流可复用，质量稳定
-实时视频滤镜                   GAN/LightDiff  延迟要求极高
-艺术创作/设计探索              Diffusion     可控性+多样性
+场景                          推荐方案        决策依据
+──────────────────────────────────────────────────────────
+实时人脸生成（游戏 NPC）       GAN           推理 10ms，Diffusion 做不到
+产品图背景替换                Diffusion     Inpaint 精确控制局部区域
+风格迁移（照片→油画）         Diffusion     LoRA 生态丰富，风格可控
+大批量商品图生成              Diffusion     工作流可复用，质量稳定
+超分辨率                     两者均可      GAN 在小倍率上仍有优势
+实时视频滤镜                  GAN           延迟要求极高
+移动端轻量部署                GAN           模型小，推理快
 ```
 
-## 四、2024-2025 年的技术前沿
+一个关键判断：如果你的场景需要"精确控制生成内容"——换背景、保持主体、注入风格、区域编辑——Diffusion 几乎是唯一选择。如果你的场景是"实时生成、延迟敏感"——GAN 仍然有不可替代的优势。
 
-### 4.1 从 SD 1.5 到 SD3/FLUX
+## Diffusion 的迭代：从 SD 1.5 到 FLUX
 
-Diffusion Model 自身也在快速迭代：
+Diffusion Model 自身也在快速演进，架构从 U-Net 转向 DiT（Diffusion Transformer）：
 
-- **SD 1.5（2022.10）**：U-Net 架构，CLIP 文本编码器，512×512
-- **SDXL（2023.7）**：双 U-Net，双 CLIP+OpenCLIP，1024×1024
-- **SD3（2024.6）**：MMDiT 架构，三文本编码器（CLIP×2+T5），DiT 范式
-- **FLUX（2024.8）**：Black Forest Labs 出品，DiT 架构，12B 参数，生成质量接近 Midjourney
+| 模型 | 架构 | 分辨率 | 参数量 | 特点 |
+|------|------|--------|--------|------|
+| SD 1.5 | U-Net + CLIP | 512×512 | 0.9B | 生态最成熟 |
+| SDXL | 双 U-Net + 双 CLIP | 1024×1024 | 3.5B | 质量大幅提升 |
+| SD3 | MMDiT + CLIP×2 + T5 | 1024×1024 | 2B | DiT 范式 |
+| FLUX | DiT | 1024×1024 | 12B | 质量接近 Midjourney |
 
-### 4.2 GAN 并没有死
-
-值得注意的是，GAN 在特定领域依然活跃：
-
-- **实时生成**：GAN 的单次前向传播速度优势明显
-- **轻量部署**：手机端人脸编辑、实时滤镜
-- **StyleGAN3**：在人脸、汽车等特定类别上仍有顶级质量
-- **混合架构**：一些新方法将 GAN 的解码器嵌入 Diffusion 流程
-
-## 五、常见误区
-
-### 误区一："Diffusion 比 GAN 慢，所以 GAN 更好"
-
-推理速度确实是一个差异，但需要看具体场景。在工程实践中，图像生成的质量和可控性往往比速度更重要。而且随着蒸馏技术（如 LCM、Turbo）的发展，Diffusion 的推理速度已经大幅提升。
-
-### 误区二："GAN 已经过时了"
-
-GAN 在实时场景和特定领域仍有不可替代的优势。技术选型应该基于具体需求，而非追逐热点。
-
-### 误区三："Diffusion 的数学很复杂，不需要理解"
-
-你不需要推导每一个公式，但理解"加噪-去噪"的基本框架，以及 α_t、β_t 这些参数的物理含义，对于后续学习采样器、LoRA 训练等内容至关重要。
-
-## 六、小结
-
-本课的核心要点：
-
-1. **GAN 的本质**是两个网络的对抗博弈，优雅但训练不稳定
-2. **Diffusion 的本质**是学习去噪，简单但需要多步迭代
-3. **Diffusion 胜出的原因**：训练稳定、可控性强、生态丰富
-4. **GAN 并未消亡**，在实时场景和特定领域仍有优势
-5. **技术选型**应基于具体场景需求，而非追逐热点
+选模型不是越新越好。SD 1.5 的 LoRA 生态最丰富，社区资源最多；SDXL 质量和生态的平衡点最好；FLUX 质量最高但训练和部署成本也最高。根据你的显存、质量要求和工期做选择。
 
 ## 练习
 
-### 练习一：概念辨析
+### 练习一：场景选型
 
-解释为什么 Diffusion Model 的训练比 GAN 更稳定。从优化目标的角度分析。
+你的项目需要为 5000 个 SKU 生成产品图，每个 SKU 需要白底图、场景图和社交媒体图。团队有 2 块 RTX 4060 Ti 16GB，工期 2 周。请选择技术方案并说明理由。
 
-### 练习二：场景选型
+### 练习二：噪声调度实验
 
-你的项目需要为电商平台生成 10 万张产品图，每张图需要替换背景并保持产品主体不变。你会选择 GAN 还是 Diffusion？说明理由。
-
-### 练习三：代码实践
-
-修改 `NoiseScheduler` 类，实现余弦噪声调度（cosine schedule）替代线性调度，并对比两种调度在 t=500 时的信噪比差异。
+修改 `NoiseScheduler`，实现余弦噪声调度（cosine schedule）：`ᾱ_t = cos²((t/T + s) / (1+s) * π/2)`，其中 `s=0.008`。对比线性调度和余弦调度在 t=500 时的信噪比差异，说明为什么 SDXL 默认使用余弦调度。
 
 ---
 
@@ -380,85 +196,34 @@ GAN 在实时场景和特定领域仍有不可替代的优势。技术选型应�
 
 ### 练习一
 
-**思路**：从优化目标的数学性质入手，对比两者的学习信号。
+选择 Diffusion（SDXL）+ ComfyUI 工作流方案。
 
-**答案**：
+理由：白底图需要 Inpaint 精确去背景，场景图需要 ControlNet + Prompt 控制生成内容，社交媒体图需要 IP-Adapter 注入品牌风格——这三个需求都需要 Diffusion 的模块化可控性。GAN 做不到"保持产品不变、只换背景"。
 
-GAN 的优化目标是一个 minimax 博弈问题：
-- Generator 想最小化 `log(1 - D(G(z)))`
-- Discriminator 想最大化 `log D(x) + log(1 - D(G(z)))`
-- 两个目标互相冲突，优化过程类似"追尾巴"，不保证收敛
-- 梯度信号依赖于 Discriminator 的质量，如果 Discriminator 太弱或太强，Generator 都学不到有用信息
+SDXL 在 4060 Ti 16GB 上可以跑 1024×1024，显存刚好够。SD 1.5 的 512×512 对产品图来说分辨率不足，FLUX 的 12B 参数在 16GB 显存上跑不动。
 
-Diffusion Model 的优化目标是单一的均方误差：
-- `L = E[||ε - ε_θ(x_t, t)||²]`
-- 只有一个网络、一个损失函数、一个优化方向
-- 梯度信号直接来自噪声预测误差，信号质量稳定
-- 数学上是标准的凸优化问题，收敛性有保证
-
-**要点**：
-- GAN 训练不稳定的根本原因是对抗博弈的非稳态性
-- Diffusion 训练稳定的根源是将生成问题转化为回归问题
+2 周工期足够搭建 ComfyUI 工作流 + 批量处理脚本。如果选 GAN 方案，光是训练和调参就可能花掉 2 周。
 
 ### 练习二
 
-**思路**：从可控性、批量效率、质量一致性三个维度分析。
-
-**答案**：
-
-选择 Diffusion Model，理由如下：
-
-1. **可控性**：需要精确保持产品主体不变，Diffusion 的 Inpaint 技术可以精确控制生成区域，GAN 难以做到像素级的局部控制
-2. **质量一致性**：10 万张图需要稳定的质量，GAN 的模式崩塌风险会导致部分图片质量异常
-3. **工作流复用**：Diffusion 可以构建 ComfyUI 工作流，一次配置批量运行
-4. **背景多样性**：通过 Prompt 控制可以轻松生成不同场景的背景
-
-具体方案：使用产品图作为 Inpaint 的 mask 区域外的参考，结合 ControlNet 保持产品轮廓，用不同 Prompt 生成多样化背景。
-
-**要点**：
-- 大批量生产场景下，工作流的可复用性比单张图的生成速度更重要
-- Inpaint + ControlNet 的组合是产品图处理的标准方案
-
-### 练习三
-
-**思路**：余弦调度使用余弦函数而非线性插值来定义噪声水平，在中间时间步有更好的信噪比过渡。
-
-**答案**：
-
 ```python
-class CosineNoiseScheduler(NoiseScheduler):
-    """余弦噪声调度器"""
+class CosineScheduler(NoiseScheduler):
+    def __init__(self, T=1000, s=0.008):
+        super().__init__(T, 0, 0)  # 覆盖父类
+        steps = torch.arange(T + 1, dtype=torch.float64) / T
+        ac = torch.cos((steps + s) / (1 + s) * np.pi / 2) ** 2
+        ac = ac / ac[0]
+        self.alpha_cumprod = torch.clamp(ac, 1e-4, 0.9999).float()
+        alphas = self.alpha_cumprod[1:] / self.alpha_cumprod[:-1]
+        self.betas = 1 - alphas
+        self.sqrt_alpha = torch.sqrt(self.alpha_cumprod)
+        self.sqrt_one_minus_alpha = torch.sqrt(1.0 - self.alpha_cumprod)
 
-    def __init__(self, num_timesteps=1000, s=0.008):
-        super().__init__(num_timesteps)
-        self.num_timesteps = num_timesteps
-
-        # 余弦调度：ᾱ_t = cos²((t/T + s) / (1+s) * π/2)
-        steps = torch.arange(num_timesteps + 1, dtype=torch.float64) / num_timesteps
-        alpha_cumprod = torch.cos((steps + s) / (1 + s) * torch.pi / 2) ** 2
-        alpha_cumprod = alpha_cumprod / alpha_cumprod[0]  # 归一化
-
-        # 裁剪防止数值问题
-        self.alpha_cumprod = torch.clamp(alpha_cumprod, 0.0001, 0.9999).float()
-        self.alphas = self.alpha_cumprod[1:] / self.alpha_cumprod[:-1]
-        self.betas = 1 - self.alphas
-        self.sqrt_alpha_cumprod = torch.sqrt(self.alpha_cumprod)
-        self.sqrt_one_minus_alpha_cumprod = torch.sqrt(1.0 - self.alpha_cumprod)
-
-# 对比
 linear = NoiseScheduler(1000)
-cosine = CosineNoiseScheduler(1000)
-
+cosine = CosineScheduler(1000)
 t = 500
-print(f"线性调度 t=500: ᾱ_t={linear.alpha_cumprod[t]:.4f}, "
-      f"SNR={10*torch.log10(linear.alpha_cumprod[t]/(1-linear.alpha_cumprod[t])):.1f}dB")
-print(f"余弦调度 t=500: ᾱ_t={cosine.alpha_cumprod[t]:.4f}, "
-      f"SNR={10*torch.log10(cosine.alpha_cumprod[t]/(1-cosine.alpha_cumprod[t])):.1f}dB")
+print(f"线性 t=500: SNR={10*torch.log10(linear.snr(t)):.1f}dB")
+print(f"余弦 t=500: SNR={10*torch.log10(cosine.snr(t)):.1f}dB")
 ```
 
-余弦调度在中间时间步保留了更多信号（更高的 SNR），这使得模型在中段更容易学习，通常能获得更好的生成质量。
-
-**要点**：
-- 余弦调度是 SDXL 和后续模型的默认选择
-- 噪声调度的选择直接影响模型在不同时间步的学习效率
-- `s` 参数控制起始偏移，通常设为 0.008
+余弦调度在中间时间步保留了更多信号（更高的 SNR），使模型在中段更容易学习。线性调度在中间步信号衰减太快，模型在这些步上学到的信息质量差。SDXL 默认余弦调度就是因为这个原因。

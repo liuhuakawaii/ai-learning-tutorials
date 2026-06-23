@@ -1,162 +1,342 @@
-# 01 Agent 通信模式——直接调用 / 消息传递 / 共享黑板
+# Agent 通信模式：直接调用、消息传递、共享黑板
 
-> 多 Agent 系统的核心问题：Agent 之间如何交流信息？
+> 前置知识：stage1 和 stage2 的多 Agent 编排经验
+> 预计时长：40 分钟
 
-## 场景引入
+## 问题从哪来
 
-你的多 Agent 系统中有三个 Agent：研究员、分析师、写作员。研究员完成了搜索，分析师怎么拿到搜索结果？是直接调用研究员的函数，还是通过消息队列传递，还是写到一个共享的"黑板"上？不同的通信方式决定了系统的耦合度、可扩展性和复杂度。
+你用 LangGraph 构建了一个多 Agent 系统，State 在节点间流转，看起来 Agent 之间已经在"通信"了。但 State 只解决了"流水线"场景——数据从 A 流到 B 再流到 C。
 
----
+当你遇到这些场景时，State 就不够用了：
+- Agent A 和 Agent B 需要双向交换信息，而不是单向传递
+- 5 个 Agent 需要共享一份实时更新的数据源
+- Agent 之间需要异步通信，A 发完消息不等 B 处理完就继续做自己的事
+- 新的 Agent 加入系统时，不应该修改已有 Agent 的代码
 
-## 学习目标
+这些场景需要不同的通信模式。
 
-- 掌握三种 Agent 通信模式
-- 理解每种模式的优缺点
-- 学会根据场景选择合适的通信模式
+## 三种通信模式的工程对比
 
----
+### 直接调用
 
-## 一、三种通信模式
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    三种通信模式                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. 直接调用（Direct Call）                                  │
-│     Agent A → 调用 Agent B → 获取结果                        │
-│     优点：简单、同步、低延迟                                  │
-│     缺点：紧耦合、不利于扩展                                  │
-│                                                             │
-│  2. 消息传递（Message Passing）                              │
-│     Agent A → 发送消息 → 消息队列 → Agent B 接收              │
-│     优点：松耦合、支持异步、可扩展                            │
-│     缺点：复杂、可能有延迟                                    │
-│                                                             │
-│  3. 共享黑板（Shared Blackboard）                            │
-│     Agent A → 写入黑板 → Agent B 读取黑板                    │
-│     优点：灵活、支持多对多、易于理解                          │
-│     缺点：需要同步机制、可能有冲突                            │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 二、实现示例
-
-### 2.1 直接调用
+Agent A 持有 Agent B 的引用，直接调用 B 的方法：
 
 ```python
 class DirectCallAgent:
-    def __init__(self, name: str, agents: dict):
+    def __init__(self, name: str):
         self.name = name
-        self.agents = agents
-    
-    def call_agent(self, agent_name: str, task: str) -> str:
-        """直接调用其他 Agent"""
-        agent = self.agents[agent_name]
-        return agent.execute(task)
+        self.peers: dict[str, "DirectCallAgent"] = {}
+
+    def register_peer(self, name: str, agent: "DirectCallAgent"):
+        self.peers[name] = agent
+
+    def call(self, peer_name: str, task: str) -> str:
+        peer = self.peers[peer_name]
+        return peer.handle(task)
+
+    def handle(self, task: str) -> str:
+        raise NotImplementedError
 ```
 
-### 2.2 消息传递
+优点：延迟最低（就是函数调用），调试最方便（直接看调用栈），类型安全（Python 的类型检查能覆盖）。
+
+缺点：Agent 之间必须互相持有引用，新增 Agent 时需要修改调用方代码。不适合跨进程/跨机器部署。
+
+适用场景：单进程内的 Agent 协作，Agent 数量少（< 5 个），对延迟敏感。
+
+### 消息传递
+
+Agent 通过消息队列通信，不直接持有对方引用：
 
 ```python
-from queue import Queue
+import asyncio
+from dataclasses import dataclass, field
+from datetime import datetime
+
+
+@dataclass
+class Message:
+    sender: str
+    receiver: str
+    content: dict
+    timestamp: str = field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
+
 
 class MessageBroker:
-    """消息代理"""
-    
     def __init__(self):
-        self.queues = {}
-    
+        self._queues: dict[str, asyncio.Queue] = {}
+
     def register(self, agent_name: str):
-        self.queues[agent_name] = Queue()
-    
-    def send(self, to: str, message: dict):
-        self.queues[to].put(message)
-    
-    def receive(self, agent_name: str) -> dict:
-        return self.queues[agent_name].get()
+        self._queues[agent_name] = asyncio.Queue()
+
+    async def send(self, message: Message):
+        if message.receiver not in self._queues:
+            raise ValueError(f"未知的接收者: {message.receiver}")
+        await self._queues[message.receiver].put(message)
+
+    async def receive(self, agent_name: str) -> Message:
+        return await self._queues[agent_name].get()
+
+    def receive_nowait(self, agent_name: str) -> Message | None:
+        try:
+            return self._queues[agent_name].get_nowait()
+        except asyncio.QueueEmpty:
+            return None
 ```
 
-### 2.3 共享黑板
+优点：Agent 之间完全解耦，新增 Agent 只需要注册队列，支持跨进程部署（把 Queue 换成 Redis Pub/Sub）。
+
+缺点：调试困难（消息在队列里，看不到调用栈），消息可能丢失（需要持久化），延迟更高。
+
+适用场景：分布式部署，Agent 数量多（> 5），需要异步通信。
+
+### 共享黑板
+
+所有 Agent 共享一个数据存储，可以读写任意字段：
 
 ```python
+import threading
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
+
+
+@dataclass
+class BlackboardEntry:
+    value: Any
+    author: str
+    timestamp: str = field(
+        default_factory=lambda: datetime.now().isoformat()
+    )
+
+
 class Blackboard:
-    """共享黑板"""
-    
     def __init__(self):
-        self.data = {}
-        self.lock = threading.Lock()
-    
-    def write(self, key: str, value: any, author: str):
-        with self.lock:
-            self.data[key] = {
-                "value": value,
-                "author": author,
-                "timestamp": datetime.now().isoformat()
-            }
-    
-    def read(self, key: str) -> any:
-        return self.data.get(key, {}).get("value")
+        self._data: dict[str, BlackboardEntry] = {}
+        self._lock = threading.Lock()
+        self._watchers: dict[str, list] = {}
+
+    def write(self, key: str, value: Any, author: str):
+        with self._lock:
+            self._data[key] = BlackboardEntry(
+                value=value, author=author
+            )
+        self._notify_watchers(key, value, author)
+
+    def read(self, key: str) -> Any | None:
+        entry = self._data.get(key)
+        return entry.value if entry else None
+
+    def read_entry(self, key: str) -> BlackboardEntry | None:
+        return self._data.get(key)
+
+    def watch(self, key: str, callback):
+        """当某个 key 被更新时，调用 callback(key, value, author)。"""
+        self._watchers.setdefault(key, []).append(callback)
+
+    def _notify_watchers(self, key, value, author):
+        for cb in self._watchers.get(key, []):
+            try:
+                cb(key, value, author)
+            except Exception:
+                pass  # watcher 的异常不应该影响写入
 ```
 
----
+优点：最灵活（任何 Agent 可以读写任何数据），天然支持多对多通信，易于理解（就是共享字典）。
 
-## 三、模式选择
+缺点：需要并发控制（加锁），数据竞争风险（两个 Agent 同时写同一个 key），watcher 回调可能引入意外的副作用。
 
-```
-选择指南：
+适用场景：Agent 需要共享实时状态（如"当前任务进度"），多对多通信，原型阶段快速迭代。
 
-简单系统、同步调用 → 直接调用
-分布式系统、异步处理 → 消息传递
-多对多通信、灵活协作 → 共享黑板
-```
+## 怎么选
 
----
+不是三选一，通常是组合使用：
 
+- **流水线数据流**：用 State（LangGraph 内置）
+- **Agent 间的实时状态**：用 Blackboard
+- **跨服务通信**：用 MessageBroker
+- **同进程内的简单调用**：用 DirectCall
 
----
-
-## 常见误区
-
-1. **通信模式选择不当**：简单系统用消息队列，引入了不必要的复杂度；分布式系统用直接调用，导致紧耦合。根据系统的规模和部署方式选择合适的通信模式。
-2. **消息格式不统一**：Agent A 发送的是纯文本，Agent B 期望的是 JSON。在设计阶段就应该定义统一的消息格式，包含 sender、content、metadata、timestamp 等标准字段。
-3. **忽略通信失败处理**：消息发送失败了怎么办？消息队列满了怎么办？接收 Agent 挂了消息会不会丢失？通信层的可靠性直接影响整个系统的稳定性。
-
----
-
-## 工程建议
-
-1. **从单 Agent 开始，按需演进**：先用单 Agent 验证核心逻辑，当遇到上下文瓶颈、能力稀释或需要并行处理时，再拆分为多 Agent。不要为了"看起来高级"而引入多 Agent 架构。
-2. **为每个 Agent 定义清晰的职责边界**：每个 Agent 应该有单一、明确的职责（如"只负责搜索""只负责分析"），输入输出格式在设计阶段就确定下来，避免职责重叠和数据格式混乱。
-3. **建立可观测性基础设施**：从第一版开始就为每个 Agent 添加结构化日志和追踪机制，记录输入、输出、耗时、错误。多 Agent 系统的调试难度远高于单 Agent，没有日志就是在"盲人摸象"。
-4. **在关键决策节点加入人工审批**：涉及高风险操作（删除数据、发送消息、支付）和不可逆操作时，使用 Human-in-the-loop 机制暂停执行，等待人类确认后再继续。
-
----
-
-## 小结
+一个实际的架构可能长这样：
 
 ```
-本课核心要点：
-
-1. 直接调用：简单、同步、紧耦合
-2. 消息传递：松耦合、异步、可扩展
-3. 共享黑板：灵活、多对多、易于理解
-4. 根据场景选择合适的通信模式
-
----
-
-**下一课**: [短期记忆——会话上下文在 Agent 间的传递策略](./02-短期记忆.md)
+LangGraph State（流水线主干）
+    │
+    ├── Blackboard（共享实时状态）
+    │   ├── 当前任务进度
+    │   ├── 各 Agent 的中间结果
+    │   └── 全局配置
+    │
+    └── MessageBroker（异步事件）
+        ├── Agent A 完成通知
+        ├── 错误告警
+        └── 人工审批请求
 ```
 
----
+## 一个完整的组合示例
+
+```python
+import asyncio
+from dataclasses import dataclass
+
+
+@dataclass
+class AgentMessage:
+    sender: str
+    receiver: str
+    action: str
+    payload: dict
+
+
+class HybridCommunicationLayer:
+    """组合三种通信方式的通信层。"""
+
+    def __init__(self):
+        self.blackboard = Blackboard()
+        self.broker = MessageBroker()
+        self._agents: dict[str, "HybridAgent"] = {}
+
+    def register_agent(self, agent: "HybridAgent"):
+        self._agents[agent.name] = agent
+        self.broker.register(agent.name)
+
+    async def send_message(self, msg: AgentMessage):
+        await self.broker.send(Message(
+            sender=msg.sender,
+            receiver=msg.receiver,
+            content={"action": msg.action, "payload": msg.payload},
+        ))
+
+    def update_shared_state(self, key: str, value, agent_name: str):
+        self.blackboard.write(key, value, agent_name)
+
+    def get_shared_state(self, key: str):
+        return self.blackboard.read(key)
+
+
+class HybridAgent:
+    def __init__(self, name: str, comm: HybridCommunicationLayer):
+        self.name = name
+        self.comm = comm
+
+    async def execute(self, task: str) -> str:
+        # 读取共享状态
+        context = self.comm.get_shared_state("context")
+
+        # 执行任务
+        result = f"[{self.name}] 处理 '{task}'，上下文: {context}"
+
+        # 更新共享状态
+        self.comm.update_shared_state(
+            f"{self.name}_result", result, self.name
+        )
+
+        # 发送完成通知
+        await self.comm.send_message(AgentMessage(
+            sender=self.name,
+            receiver="supervisor",
+            action="completed",
+            payload={"result": result},
+        ))
+
+        return result
+
+
+async def main():
+    comm = HybridCommunicationLayer()
+
+    agents = [
+        HybridAgent("researcher", comm),
+        HybridAgent("analyst", comm),
+    ]
+    for agent in agents:
+        comm.register_agent(agent)
+
+    # 设置共享上下文
+    comm.update_shared_state("context", "2025 年 AI 趋势", "system")
+
+    # 并行执行
+    await asyncio.gather(
+        agents[0].execute("搜索信息"),
+        agents[1].execute("分析数据"),
+    )
+
+    # 查看结果
+    print(comm.get_shared_state("researcher_result"))
+    print(comm.get_shared_state("analyst_result"))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
 ## 练习
 
-1. **实现题**：实现一个消息代理，支持 Agent 间消息传递。
+### 练习一：实现带版本号的 Blackboard
 
-2. **黑板题**：实现一个共享黑板，支持多 Agent 读写。
+给 Blackboard 加版本控制：每次写入时自动递增版本号，读取时可以获取指定版本的数据。
 
-3. **选择题**：你的系统适合用哪种通信模式？为什么？
+```python
+class VersionedBlackboard:
+    def __init__(self):
+        self._history: dict[str, list[BlackboardEntry]] = {}
+
+    def write(self, key: str, value: Any, author: str):
+        """写入时自动追加到历史记录。"""
+        ...
+
+    def read(self, key: str, version: int = -1) -> Any | None:
+        """读取指定版本，默认最新版。version=-1 表示最新。"""
+        ...
+
+    def get_versions(self, key: str) -> int:
+        """返回某个 key 的版本数量。"""
+        ...
+```
+
+### 练习二：实现消息超时
+
+给 MessageBroker 加超时机制：如果消息在队列中等待超过 N 秒未被消费，自动移除并记录到死信队列。
+
+### 练习三：通信模式选型
+
+画出以下场景的通信架构图，标注每条数据流使用哪种通信方式：
+- 场景：多 Agent 代码审查系统（搜索 Agent 搜索代码、分析 Agent 分析问题、审核 Agent 审核质量、通知 Agent 发送通知）
+- 约束：通知 Agent 异步执行，不阻塞主流程；所有 Agent 需要共享"当前审查进度"
+
+---
+
+## 参考答案
+
+### 练习一
+
+```python
+class VersionedBlackboard:
+    def __init__(self):
+        self._history: dict[str, list[BlackboardEntry]] = {}
+        self._lock = threading.Lock()
+
+    def write(self, key: str, value: Any, author: str):
+        with self._lock:
+            if key not in self._history:
+                self._history[key] = []
+            self._history[key].append(BlackboardEntry(
+                value=value, author=author,
+            ))
+
+    def read(self, key: str, version: int = -1) -> Any | None:
+        entries = self._history.get(key, [])
+        if not entries:
+            return None
+        try:
+            return entries[version].value
+        except IndexError:
+            return None
+
+    def get_versions(self, key: str) -> int:
+        return len(self._history.get(key, []))
+```
+
+设计决策：为什么用列表存历史而不是覆盖？因为多 Agent 系统中，回滚和审计是常见需求。保留历史版本的存储成本很低（相对于 LLM 调用的 token 成本），但调试价值很高。

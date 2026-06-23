@@ -1,169 +1,343 @@
-# 06 阶段实战——搭建一个端到端的训练 Pipeline
+# 阶段实战——搭建端到端训练 Pipeline
 
-> 把前 5 课学到的知识整合成一个完整的训练 Pipeline。
+> 课型：项目推进课
+> 目标：一条命令，从原始数据到可部署模型
 
-## 场景引入
+## 当前卡点
 
-数据处理、训练配置、分布式训练、模型合并、量化导出——每个环节单独都会了，但要搭建一个端到端的自动化训练系统，把它们串联起来，还是会手忙脚乱。新数据来了要手动跑数据处理，改了配置忘了同步到代码，导出的模型格式对不上部署工具。你需要一个完整的 Pipeline，从原始数据到可部署模型，一条命令搞定。
+数据处理、训练配置、模型合并、量化导出——每个环节单独都会了，但串成一个自动化系统还是会手忙脚乱。新数据来了要手动跑处理，改了配置忘了同步到代码，导出的模型格式对不上部署工具。
 
----
+你需要一个 Pipeline：改配置就能跑不同的实验，不需要改代码。
 
-## 学习目标
-
-- 搭建端到端的训练 Pipeline
-- 集成数据处理、训练、评估、导出
-- 输出一个可重复使用的训练系统
-
----
-
-## 一、Pipeline 架构
+## 整体架构
 
 ```
-训练 Pipeline：
-
-数据 → 预处理 → 训练 → 评估 → 量化 → 导出 → 部署
-  │      │       │      │      │      │      │
-  ▼      ▼       ▼      ▼      ▼      ▼      ▼
-原始数据 清洗后 模型权重 评估报告 量化模型 部署包 服务
+原始数据 → 数据处理 → 训练 → 评估 → 合并 → 量化 → 导出
 ```
 
----
+每个环节是独立模块，通过配置文件串联。评估不达标就停止，不会浪费时间做后续步骤。
 
-## 二、完整实现
+## 配置文件
+
+一个 YAML 文件定义整个实验：
+
+```yaml
+# config.yaml
+model:
+  name: "Qwen/Qwen2.5-7B-Instruct"
+  torch_dtype: "bfloat16"
+
+data:
+  train_path: "data/train.json"
+  eval_path: "data/eval.json"
+  max_length: 512
+
+lora:
+  r: 16
+  alpha: 32
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  dropout: 0.05
+
+training:
+  epochs: 3
+  batch_size: 4
+  gradient_accumulation: 4
+  learning_rate: 2e-4
+  warmup_ratio: 0.1
+
+eval:
+  min_accuracy: 0.7
+
+output:
+  lora_dir: "./output/lora"
+  merged_dir: "./output/merged"
+  gguf_path: "./output/model.gguf"
+
+quantize:
+  enabled: true
+  method: "Q4_K_M"
+```
+
+## 核心模块
+
+### 数据处理
 
 ```python
-class TrainingPipeline:
-    """训练 Pipeline"""
-    
-    def __init__(self, config_path: str):
-        self.config = load_config(config_path)
-    
-    def run(self):
-        """运行 Pipeline"""
-        # 1. 数据处理
-        dataset = self.process_data()
-        
-        # 2. 训练
-        model = self.train(dataset)
-        
-        # 3. 评估
-        results = self.evaluate(model)
-        
-        # 4. 合并
-        merged_model = self.merge(model)
-        
-        # 5. 量化
-        quantized_model = self.quantize(merged_model)
-        
-        # 6. 导出
-        self.export(quantized_model)
-        
-        return results
-    
-    def process_data(self):
-        """数据处理"""
-        pipeline = DataPipeline()
-        # 添加步骤...
-        return pipeline.run(self.config["data"])
-    
-    def train(self, dataset):
-        """训练模型"""
-        # 加载模型
-        model = load_model(self.config["model"])
-        
-        # 训练
-        trainer = create_trainer(model, dataset, self.config["training"])
-        trainer.train()
-        
-        return trainer.model
-    
-    def evaluate(self, model):
-        """评估模型"""
-        return evaluate_model(model, self.config["eval"])
-    
-    def merge(self, model):
-        """合并 LoRA"""
-        merged = model.merge_and_unload()
-        merged.save_pretrained(self.config["output"]["merged_dir"])
-        return merged
-    
-    def quantize(self, model):
-        """量化模型"""
-        # GGUF 导出
-        export_to_gguf(model, self.config["output"]["gguf_path"])
-        return model
-    
-    def export(self, model):
-        """导出模型"""
-        model.save_pretrained(self.config["output"]["final_dir"])
+from datasets import load_dataset
+from transformers import AutoTokenizer
+
+def process_data(config: dict, tokenizer) -> dict:
+    dataset = load_dataset("json", data_files={
+        "train": config["data"]["train_path"],
+        "eval": config["data"]["eval_path"],
+    })
+
+    def format_sample(example):
+        text = f"### 指令：{example['instruction']}\n### 回答：{example['output']}"
+        tokenized = tokenizer(
+            text, truncation=True,
+            max_length=config["data"]["max_length"],
+            padding="max_length",
+        )
+        tokenized["labels"] = tokenized["input_ids"].copy()
+        return tokenized
+
+    return {
+        "train": dataset["train"].map(format_sample, remove_columns=dataset["train"].column_names),
+        "eval": dataset["eval"].map(format_sample, remove_columns=dataset["eval"].column_names),
+    }
 ```
 
----
-
-## 三、运行
+### 训练
 
 ```python
-# 运行 Pipeline
-pipeline = TrainingPipeline("config.yaml")
-results = pipeline.run()
+from transformers import AutoModelForCausalLM, TrainingArguments, Trainer
+from peft import LoraConfig, get_peft_model
+import torch
 
-# 生成报告
-report = generate_report(results)
-print(report)
+def train_model(config: dict, dataset: dict, tokenizer) -> str:
+    model = AutoModelForCausalLM.from_pretrained(
+        config["model"]["name"],
+        torch_dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+
+    lora_config = LoraConfig(
+        r=config["lora"]["r"],
+        lora_alpha=config["lora"]["alpha"],
+        target_modules=config["lora"]["target_modules"],
+        lora_dropout=config["lora"]["dropout"],
+        task_type="CAUSAL_LM",
+    )
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+
+    training_args = TrainingArguments(
+        output_dir=config["output"]["lora_dir"],
+        num_train_epochs=config["training"]["epochs"],
+        per_device_train_batch_size=config["training"]["batch_size"],
+        gradient_accumulation_steps=config["training"]["gradient_accumulation"],
+        learning_rate=config["training"]["learning_rate"],
+        warmup_ratio=config["training"]["warmup_ratio"],
+        lr_scheduler_type="cosine",
+        eval_strategy="epoch",
+        save_strategy="epoch",
+        logging_steps=10,
+        bf16=True,
+        load_best_model_at_end=True,
+    )
+
+    trainer = Trainer(
+        model=model, args=training_args,
+        train_dataset=dataset["train"], eval_dataset=dataset["eval"],
+    )
+    trainer.train()
+    model.save_pretrained(config["output"]["lora_dir"])
+    return config["output"]["lora_dir"]
+```
+
+### 评估
+
+```python
+import json
+
+def evaluate_model(config: dict, lora_path: str, tokenizer) -> dict:
+    from peft import PeftModel
+
+    base = AutoModelForCausalLM.from_pretrained(
+        config["model"]["name"],
+        torch_dtype=torch.bfloat16, device_map="auto", trust_remote_code=True,
+    )
+    model = PeftModel.from_pretrained(base, lora_path)
+    model.eval()
+
+    with open(config["data"]["eval_path"]) as f:
+        test_data = json.load(f)
+
+    correct = 0
+    for item in test_data:
+        prompt = f"### 指令：{item['instruction']}\n### 回答："
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            outputs = model.generate(**inputs, max_new_tokens=256, temperature=0)
+        predicted = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
+        if item["output"].strip() in predicted.strip():
+            correct += 1
+
+    return {"accuracy": correct / len(test_data), "correct": correct, "total": len(test_data)}
+```
+
+### 合并与量化
+
+```python
+from peft import PeftModel
+
+def merge_lora(config: dict, lora_path: str) -> str:
+    base = AutoModelForCausalLM.from_pretrained(config["model"]["name"], torch_dtype="auto")
+    model = PeftModel.from_pretrained(base, lora_path)
+    merged = model.merge_and_unload()
+
+    merged_path = config["output"]["merged_dir"]
+    merged.save_pretrained(merged_path)
+    tokenizer = AutoTokenizer.from_pretrained(config["model"]["name"], trust_remote_code=True)
+    tokenizer.save_pretrained(merged_path)
+    return merged_path
+
+def quantize_gguf(config: dict, model_path: str):
+    import subprocess
+    subprocess.run([
+        "python", "convert_hf_to_gguf.py", model_path,
+        "--outfile", config["output"]["gguf_path"],
+        "--outtype", config["quantize"]["method"],
+    ], check=True)
+```
+
+## 串联运行
+
+```python
+# run_pipeline.py
+import yaml
+from transformers import AutoTokenizer
+
+def main():
+    with open("config.yaml") as f:
+        config = yaml.safe_load(f)
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        config["model"]["name"], trust_remote_code=True
+    )
+
+    print("Step 1: 数据处理")
+    dataset = process_data(config, tokenizer)
+
+    print("Step 2: 训练")
+    lora_path = train_model(config, dataset, tokenizer)
+
+    print("Step 3: 评估")
+    eval_results = evaluate_model(config, lora_path, tokenizer)
+    print(f"准确率: {eval_results['accuracy']:.2%}")
+
+    if eval_results["accuracy"] < config["eval"]["min_accuracy"]:
+        print("不达标，停止")
+        return
+
+    print("Step 4: 合并 LoRA")
+    merged_path = merge_lora(config, lora_path)
+
+    if config.get("quantize", {}).get("enabled", False):
+        print("Step 5: 量化")
+        quantize_gguf(config, merged_path)
+
+    print("Pipeline 完成")
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash
+python run_pipeline.py
+```
+
+## 断点续跑
+
+Pipeline 在第 3 步失败了，修复后应该从第 3 步继续，而不是从头开始：
+
+```python
+import json
+from pathlib import Path
+
+STATE_FILE = "pipeline_state.json"
+
+def load_state() -> dict:
+    if Path(STATE_FILE).exists():
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    return {}
+
+def save_state(state: dict):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+def run_with_checkpoint(config, tokenizer):
+    state = load_state()
+
+    if "data_processed" not in state:
+        dataset = process_data(config, tokenizer)
+        save_state({**state, "data_processed": True})
+    else:
+        print("数据处理已完成，跳过")
+
+    if "trained" not in state:
+        lora_path = train_model(config, dataset, tokenizer)
+        save_state({**state, "trained": True, "lora_path": lora_path})
+    else:
+        lora_path = state["lora_path"]
+
+    # ... 后续步骤同理
+```
+
+## 容易犯的错
+
+**Pipeline 没有幂等性**。重复运行产生重复数据或覆盖已有结果。每一步都应该支持幂等执行。
+
+**所有步骤串行执行**。数据处理和模型评估可以并行时就并行，缩短总耗时。
+
+**硬编码路径和参数**。Pipeline 中的文件路径、模型名称、参数都应该是可配置的。换个环境就要改代码的 Pipeline 不是真正的 Pipeline。
+
+**Pipeline 失败后没有通知**。后台运行的 Pipeline 失败了但没人知道。配置失败告警，至少写个日志。
+
+## 练习
+
+### 练习一：搭建你的 Pipeline
+
+用上面的代码，为你的数据集搭建完整的 Pipeline。先用小参数快速验证（epochs=1, batch_size=2），确认能跑通后再用正式参数。
+
+### 练习二：添加断点续跑
+
+实现 checkpoint 机制。关键：用状态文件记录每步的完成状态和输出路径，失败后重新运行时跳过已完成的步骤。
+
+```python
+# 你的实现
+# 要求：支持从任意步骤恢复，不重复执行已完成的步骤
+```
+
+### 练习三：生成实验报告
+
+扩展 Pipeline，每次运行后自动生成一份 Markdown 报告：
+
+```python
+def generate_pipeline_report(config: dict, eval_results: dict, state: dict) -> str:
+    """生成报告，包含：配置摘要、评估结果、达标判断、各步骤状态"""
+    # 你的实现
+    # 报告要面向决策者——先说结论（达标/不达标），再给数据支撑
+    pass
 ```
 
 ---
 
-## 常见误区
+## 参考答案
 
-1. **Pipeline 没有幂等性**：重复运行 Pipeline 会产生重复数据或覆盖已有结果。Pipeline 的每一步都应该支持幂等执行——相同输入产生相同输出。
+### 练习一
 
-2. **所有步骤串行执行**：数据处理和模型评估可以并行执行，不需要等数据处理全部完成才开始评估。合理利用并行可以显著缩短 Pipeline 总耗时。
+config.yaml 中的路径要和实际文件对应。训练参数先用小值快速验证，确认 Pipeline 能跑通后再用正式参数。常见坑：tokenizer 的 `trust_remote_code` 要和模型加载时一致，否则 special tokens 处理会出问题。
 
-3. **Pipeline 失败后没有通知**：后台运行的 Pipeline 失败了但没人知道，白白浪费时间。必须配置失败告警（邮件、Slack、企业微信）。
+### 练习二
 
-4. **硬编码路径和参数**：Pipeline 中的文件路径、模型名称、参数都应该是可配置的，不能硬编码。换个环境就要改代码的 Pipeline 不是真正的 Pipeline。
+```python
+def run_step(state: dict, step_name: str, fn, save_keys: dict = None):
+    if step_name in state:
+        print(f"{step_name} 已完成，跳过")
+        return state[step_name].get("result")
 
----
-
-## 工程建议
-
-1. **Pipeline 要支持断点续跑**：如果 Pipeline 在第 3 步失败了，修复后应该从第 3 步继续，而不是从头开始。用状态文件记录每步的完成状态。
-
-2. **每步输出要可检查**：Pipeline 每一步的输出都应该保存到文件，方便人工检查。不要让数据在内存中流转到最后一步才发现中间步骤有问题。
-
-3. **用配置文件驱动 Pipeline**：一个 YAML 配置文件定义完整的 Pipeline——模型、数据、训练参数、评估指标、导出格式。改配置就能跑不同的实验。
-
-4. **Pipeline 结果要可追溯**：记录每次 Pipeline 运行的完整信息——时间、配置、输入数据版本、输出结果、运行日志。方便复现和审计。
-
----
-
-## 四、课程总结
-
-```
-课程 06 总结：
-
-恭喜你完成了开源模型部署与微调实战课程！
-
-你现在能够：
-- 用 Ollama / vLLM / llama.cpp 本地部署开源大模型
-- 理解 LoRA / QLoRA 微调原理
-- 用领域数据微调 7B-14B 模型
-- 搭建完整的训练 Pipeline
-- 做出合理的 build vs buy 决策
-
-下一步：
-- 将所学应用到你的实际项目中
-- 探索更大的模型（14B、70B）
-- 关注开源模型的最新发展
+    result = fn()
+    state[step_name] = {"done": True, "result": result}
+    if save_keys:
+        state[step_name].update(save_keys)
+    save_state(state)
+    return result
 ```
 
----
+### 练习三
 
-## 作业
-
-1. **完成实战**：运行完整的训练 Pipeline。
-
-2. **优化题**：优化 Pipeline 的某个环节。
-
-3. **总结反思**：回顾整个课程，总结你的收获和下一步计划。
+报告应该面向决策者——先说结论（达标/不达标），再给数据支撑。数字本身没有意义，分析才有价值。比如不要只写"准确率 72%"，要写"准确率 72%，超过阈值 70%，但余量较小，建议在下一轮实验中增加训练数据量"。

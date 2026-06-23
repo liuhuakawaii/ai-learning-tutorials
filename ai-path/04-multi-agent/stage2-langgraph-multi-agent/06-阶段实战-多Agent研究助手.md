@@ -1,108 +1,202 @@
-# 06 阶段实战——用 LangGraph 构建一个多 Agent 研究助手
+# 阶段实战：用 LangGraph 构建多 Agent 研究助手
 
-> 把前 5 课学到的 LangGraph 知识整合成一个完整的研究助手。
+> 预计时长：4 小时
+> 目标：用 LangGraph 构建一个 Supervisor 模式的研究助手，包含搜索、分析、写作、审核四个 Agent
 
-## 场景引入
+## 架构决策
 
-你已经掌握了 LangGraph 的 State、Node、Edge、子图、状态管理和错误处理。现在需要把这些知识整合成一个完整的产品：一个能搜索资料、分析数据、撰写报告、自我审核的多 Agent 研究助手。这个实战项目会让你真正理解如何用 LangGraph 构建生产级多 Agent 系统。
+为什么选 Supervisor 模式而不是 Sequential？
 
----
+研究助手的任务是：用户输入一个主题 → 搜索相关信息 → 分析信息 → 撰写报告 → 审核质量。看起来是 Sequential，但实际情况更复杂：
+- 搜索结果可能不理想，需要重新搜索（循环）
+- 审核可能不通过，需要重写（回退）
+- 有些主题只需要搜索+分析，不需要写报告（分支）
 
-## 学习目标
-
-- 用 LangGraph 构建完整的研究助手
-- 集成搜索、分析、写作、审核四个 Agent
-- 输出一个可运行的多 Agent 系统
-
----
-
-## 一、系统架构
+这些动态路由需求，Sequential 做不到，Supervisor 可以。
 
 ```
-研究助手架构：
-
-用户输入
-    │
-    ▼
-Supervisor ──→ 搜索 Agent ──→ 分析 Agent ──→ 写作 Agent ──→ 审核 Agent
-    │                                                           │
-    └───────────────────── 最终输出 ←──────────────────────────┘
+用户输入 → Supervisor → 搜索 Agent ─┐
+                ↑                    ├→ Supervisor → 分析 Agent ─┐
+                │                    │                          ├→ Supervisor → 写作 Agent ─┐
+                │                    │                          │                          ├→ Supervisor → 审核 Agent
+                │                    │                          │                          │
+                └────────────────────┴──────────────────────────┴──────────────────────────┘
+                                       Supervisor 根据状态决定下一步
 ```
 
----
-
-## 二、完整实现
+## 实现
 
 ```python
-from langgraph.graph import StateGraph, END
 from typing import TypedDict, Annotated
+from operator import add
+from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 
+
+# ── State 定义 ──
+
 class ResearchState(TypedDict):
-    messages: list
-    task: str
-    research: str
+    topic: str
+    search_results: str
     analysis: str
-    report: str
-    review: str
-    next_agent: str
+    draft: str
+    review_result: str
+    approved: bool
+    current_step: str
+    step_count: int
+    errors: Annotated[list[str], add]
 
-def supervisor(state: ResearchState) -> ResearchState:
-    """Supervisor 决策"""
-    llm = ChatOpenAI(model="gpt-4o")
-    
-    prompt = f"""决定下一步应该由哪个 Agent 执行。
 
-任务：{state['task']}
-当前状态：research={bool(state.get('research'))}, analysis={bool(state.get('analysis'))}, report={bool(state.get('report'))}
+# ── LLM 初始化 ──
 
-可用 Agent：searcher, analyst, writer, reviewer, FINISH
-只输出 Agent 名称。"""
-    
+llm = ChatOpenAI(model="gpt-4o-mini")  # 用 mini 降低成本
+
+
+# ── Agent 节点 ──
+
+def search_agent(state: ResearchState) -> dict:
+    """搜索 Agent：收集主题相关信息。"""
+    topic = state["topic"]
+    prompt = f"""你是一个研究搜索专家。针对以下主题，列出 5 个关键搜索方向和每个方向应该找到的核心信息。
+
+主题：{topic}
+
+输出格式：
+1. [搜索方向] 需要找到的核心信息
+2. ..."""
+
     response = llm.invoke(prompt)
-    return {**state, "next_agent": response.content.strip()}
+    return {
+        "search_results": response.content,
+        "current_step": "supervisor",
+        "step_count": state.get("step_count", 0) + 1,
+    }
 
-def searcher(state: ResearchState) -> ResearchState:
-    """搜索 Agent"""
-    llm = ChatOpenAI(model="gpt-4o")
-    response = llm.invoke(f"搜索以下主题的相关信息：{state['task']}")
-    return {**state, "research": response.content, "next_agent": "supervisor"}
 
-def analyst(state: ResearchState) -> ResearchState:
-    """分析 Agent"""
-    llm = ChatOpenAI(model="gpt-4o")
-    response = llm.invoke(f"分析以下研究结果：{state['research']}")
-    return {**state, "analysis": response.content, "next_agent": "supervisor"}
+def analysis_agent(state: ResearchState) -> dict:
+    """分析 Agent：从搜索结果中提取洞察。"""
+    prompt = f"""你是一个数据分析专家。基于以下搜索结果，提取核心洞察。
 
-def writer(state: ResearchState) -> ResearchState:
-    """写作 Agent"""
-    llm = ChatOpenAI(model="gpt-4o")
-    response = llm.invoke(f"根据以下分析撰写报告：{state['analysis']}")
-    return {**state, "report": response.content, "next_agent": "supervisor"}
+搜索结果：
+{state['search_results']}
 
-def reviewer(state: ResearchState) -> ResearchState:
-    """审核 Agent"""
-    llm = ChatOpenAI(model="gpt-4o")
-    response = llm.invoke(f"审核以下报告的质量：{state['report']}")
-    return {**state, "review": response.content, "next_agent": "supervisor"}
+输出要求：
+1. 列出 3-5 个核心发现
+2. 每个发现附带支撑数据
+3. 标注信息的可信度（高/中/低）"""
 
-def route(state: ResearchState) -> str:
-    """路由函数"""
-    next_agent = state.get("next_agent", "FINISH")
-    if next_agent == "FINISH":
+    response = llm.invoke(prompt)
+    return {
+        "analysis": response.content,
+        "current_step": "supervisor",
+        "step_count": state.get("step_count", 0) + 1,
+    }
+
+
+def writing_agent(state: ResearchState) -> dict:
+    """写作 Agent：基于分析结果撰写报告。"""
+    prompt = f"""你是一个技术写作专家。基于以下分析结果撰写一份研究报告。
+
+分析结果：
+{state['analysis']}
+
+报告要求：
+1. 标题
+2. 执行摘要（100 字以内）
+3. 核心发现（每个发现一段）
+4. 结论与建议
+5. 总字数 500-800 字"""
+
+    response = llm.invoke(prompt)
+    return {
+        "draft": response.content,
+        "current_step": "supervisor",
+        "step_count": state.get("step_count", 0) + 1,
+    }
+
+
+def review_agent(state: ResearchState) -> dict:
+    """审核 Agent：评估报告质量。"""
+    prompt = f"""你是一个内容审核专家。评估以下研究报告的质量。
+
+报告：
+{state['draft']}
+
+评估维度：
+1. 信息准确性（搜索结果是否有支撑）
+2. 逻辑连贯性（结论是否从分析中合理推导）
+3. 完整性（是否覆盖了搜索结果中的关键信息）
+4. 可读性（结构是否清晰，语言是否简洁）
+
+输出：
+- 通过/不通过
+- 不通过的原因和修改建议"""
+
+    response = llm.invoke(prompt)
+    approved = "通过" in response.content and "不通过" not in response.content
+    return {
+        "review_result": response.content,
+        "approved": approved,
+        "current_step": "supervisor",
+        "step_count": state.get("step_count", 0) + 1,
+    }
+
+
+# ── Supervisor 节点 ──
+
+def supervisor(state: ResearchState) -> dict:
+    """Supervisor：决定下一步由谁执行。"""
+    step_count = state.get("step_count", 0)
+
+    # 安全阀：防止无限循环
+    if step_count >= 10:
+        return {"current_step": "FINISH"}
+
+    # 基于状态的规则路由
+    if not state.get("search_results"):
+        return {"current_step": "searcher"}
+    if not state.get("analysis"):
+        return {"current_step": "analyst"}
+    if not state.get("draft"):
+        return {"current_step": "writer"}
+    if not state.get("review_result"):
+        return {"current_step": "reviewer"}
+    if state.get("approved"):
+        return {"current_step": "FINISH"}
+    # 审核不通过，重写
+    return {"current_step": "writer"}
+
+
+# ── 路由函数 ──
+
+def route_from_supervisor(state: ResearchState) -> str:
+    step = state.get("current_step", "FINISH")
+    if step == "FINISH":
         return END
-    return next_agent
+    return step
 
-# 构建图
+
+# ── 构建图 ──
+
 graph = StateGraph(ResearchState)
+
 graph.add_node("supervisor", supervisor)
-graph.add_node("searcher", searcher)
-graph.add_node("analyst", analyst)
-graph.add_node("writer", writer)
-graph.add_node("reviewer", reviewer)
+graph.add_node("searcher", search_agent)
+graph.add_node("analyst", analysis_agent)
+graph.add_node("writer", writing_agent)
+graph.add_node("reviewer", review_agent)
 
 graph.set_entry_point("supervisor")
-graph.add_conditional_edges("supervisor", route)
+
+graph.add_conditional_edges("supervisor", route_from_supervisor, {
+    "searcher": "searcher",
+    "analyst": "analyst",
+    "writer": "writer",
+    "reviewer": "reviewer",
+    END: END,
+})
+
+# 所有 Agent 执行完回到 Supervisor
 graph.add_edge("searcher", "supervisor")
 graph.add_edge("analyst", "supervisor")
 graph.add_edge("writer", "supervisor")
@@ -110,85 +204,63 @@ graph.add_edge("reviewer", "supervisor")
 
 app = graph.compile()
 
-# 运行
-result = app.invoke({
-    "messages": [],
-    "task": "分析 2024 年 AI 行业的发展趋势",
-    "research": "",
-    "analysis": "",
-    "report": "",
-    "review": "",
-    "next_agent": "supervisor"
-})
 
-print(result["report"])
+# ── 运行 ──
+
+if __name__ == "__main__":
+    result = app.invoke({
+        "topic": "2025 年多 Agent 系统的发展趋势",
+        "search_results": "",
+        "analysis": "",
+        "draft": "",
+        "review_result": "",
+        "approved": False,
+        "current_step": "",
+        "step_count": 0,
+        "errors": [],
+    })
+
+    print("=" * 60)
+    print("最终报告：")
+    print(result["draft"])
+    print("=" * 60)
+    print(f"审核结果：{'通过' if result['approved'] else '未通过'}")
+    print(f"总步数：{result['step_count']}")
 ```
 
----
+## 为什么这样设计
 
-## 三、运行效果
+**Supervisor 用规则引擎而不是 LLM**
 
-```
-[Supervisor] 决定：searcher
-[searcher] 搜索中...
-[Supervisor] 决定：analyst
-[analyst] 分析中...
-[Supervisor] 决定：writer
-[writer] 撰写中...
-[Supervisor] 决定：reviewer
-[reviewer] 审核中...
-[Supervisor] 决定：FINISH
+很多教程让 Supervisor 用 LLM 决策下一步。这在生产环境中通常不值得：
+- 增加了一次 LLM 调用的延迟和成本
+- LLM 的路由决策不稳定，同样的状态可能路由到不同节点
+- 规则引擎可预测、可测试、可调试
 
-最终报告：
-2024 年 AI 行业呈现以下主要趋势：
-1. 多模态 AI 快速发展...
-2. Agent 技术逐渐成熟...
-3. 开源模型持续进步...
-```
+什么时候用 LLM 做 Supervisor？当路由逻辑本身很复杂、难以用规则表达时。比如"根据搜索结果的质量决定是重新搜索还是继续分析"——"质量"的判断可能需要 LLM。
 
----
+**审核不通过时回到 writer 而不是重新开始**
 
+这是一个关键的架构决策。如果审核不通过就回到 searcher 重新搜索，会浪费已经搜索到的信息。回到 writer 意味着：
+- 搜索结果保留
+- 分析结果保留
+- 只重写报告部分
 
----
+但要注意：如果 writer 反复不通过，可能是分析结果本身有问题。当前的简单规则路由处理不了这种情况，需要更复杂的回退逻辑。
 
-## 常见误区
+**step_count 安全阀**
 
-1. **Supervisor 决策逻辑过于简单**：如果 Supervisor 只是按固定顺序调用 Agent，那和 Sequential Pipeline 没有区别。Supervisor 应该根据当前状态（哪些 Agent 已完成、结果质量如何）动态决策。
-2. **没有中间结果验证**：Agent 之间只传递结果，不验证结果质量。搜索 Agent 返回了空结果，分析 Agent 还是照常分析，最终输出一堆废话。应该在每个 Agent 之后添加结果验证逻辑。
-3. **忽略 Token 成本控制**：每个 Agent 都调用 GPT-4o，一轮下来可能消耗几万个 Token。对于简单任务，某些 Agent 可以用更便宜的模型。根据任务复杂度选择合适的模型。
+多 Agent 系统最容易出现的问题就是死循环。Supervisor 可能因为状态判断逻辑的 bug，反复调度同一个 Agent。step_count 是一个简单但有效的安全措施。
 
----
+## 验收标准
 
-## 工程建议
+1. 能完整运行：搜索 → 分析 → 写作 → 审核 → 输出
+2. 审核不通过时能自动重写（最多 3 次）
+3. step_count 超过限制时能正常终止
+4. 输出包含完整的执行轨迹（经过了哪些 Agent、每步的输出）
 
-1. **从单 Agent 开始，按需演进**：先用单 Agent 验证核心逻辑，当遇到上下文瓶颈、能力稀释或需要并行处理时，再拆分为多 Agent。不要为了"看起来高级"而引入多 Agent 架构。
-2. **为每个 Agent 定义清晰的职责边界**：每个 Agent 应该有单一、明确的职责（如"只负责搜索""只负责分析"），输入输出格式在设计阶段就确定下来，避免职责重叠和数据格式混乱。
-3. **建立可观测性基础设施**：从第一版开始就为每个 Agent 添加结构化日志和追踪机制，记录输入、输出、耗时、错误。多 Agent 系统的调试难度远高于单 Agent，没有日志就是在"盲人摸象"。
-4. **在关键决策节点加入人工审批**：涉及高风险操作（删除数据、发送消息、支付）和不可逆操作时，使用 Human-in-the-loop 机制暂停执行，等待人类确认后再继续。
+## 扩展挑战
 
----
-
-## 小结
-
-```
-本课核心要点：
-
-1. 用 LangGraph 构建完整的研究助手
-2. Supervisor 负责路由，Agent 负责执行
-3. 状态在节点间流转，累积结果
-4. 从简单开始，逐步增加复杂度
-
-阶段总结：
-  你已经掌握了用 LangGraph 构建多 Agent 系统。
-  下一阶段，我们将学习 Agent 间的通信与记忆。
-```
-
----
-
-## 作业
-
-1. **完成实战**：运行本课的研究助手。
-
-2. **扩展题**：添加一个总结 Agent，在最后生成执行摘要。
-
-3. **优化题**：改进 Supervisor 的决策逻辑，提高执行效率。
+1. **并行搜索**：让搜索 Agent 同时搜索多个方向，分析 Agent 等所有搜索完成后再执行
+2. **用 LLM Supervisor**：把规则引擎换成 LLM 调用，对比两种方式的路由质量
+3. **添加人工审批**：在审核 Agent 之后加一个中断点，等待人类确认

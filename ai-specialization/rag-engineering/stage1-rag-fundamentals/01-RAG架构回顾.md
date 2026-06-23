@@ -1,573 +1,207 @@
-# Lesson 1: RAG 架构回顾
+# RAG 架构回顾：从一次检索失败说起
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║  Stage 1 · Lesson 1                                         ║
-║  RAG 架构回顾                                                ║
-║  预计时间: 45 分钟                                            ║
-╚══════════════════════════════════════════════════════════════╝
-```
+> Stage 1 · Lesson 1 | 前置：Python 基础、了解 LLM API 调用 | 时长：45 分钟
 
-## 前置要求
+你的 RAG 客服系统上线第一天就翻车了。用户问"如何退货"，系统回答了"如何下单"的内容。你查了日志，发现检索阶段确实返回了文档，但全是不相关的。问题出在哪？是分块把退货流程拆散了？是 embedding 没理解语义？还是向量数据库的相似度阈值设低了？
 
-- Python 基础编程能力
-- 了解 LLM API 的基本使用（如 OpenAI ChatCompletion）
-- 了解基本的文本处理概念
+这节课我们不从定义开始，而是从这次故障出发，把 RAG 的每个组件拆开看一遍，搞清楚每个环节可能出什么问题。
 
-## 场景引入
+## 你要解决的问题
 
-你所在的团队刚上线了一个基于 LLM 的智能客服系统。上线第一天就收到大量投诉：用户问"如何退货"，系统却回答了"如何下单"的内容；用户问最新的促销活动，系统完全答不上来，因为模型的训练数据截止到半年前。团队意识到，仅靠 LLM 本身的知识远远不够，需要让它能够"查阅"最新的业务文档。这就是 RAG 要解决的核心问题——让 LLM 在回答之前先检索相关知识，确保回答既准确又有时效性。
+- RAG 系统返回错误答案时，如何定位是哪个环节出了问题
+- Naive RAG、Advanced RAG、Modular RAG 三种范式的区别，以及什么时候该升级
+- 索引、检索、生成三阶段各自负责什么，失败时各自的表现是什么
 
-## 学习目标
+## 1. 先看现场：检索返回了什么
 
-完成本课后，你将能够：
-
-1. **理解三种 RAG 范式**：Naive RAG、Advanced RAG、Modular RAG 的区别与适用场景
-2. **掌握三阶段流水线**：索引（Indexing）、检索（Retrieval）、生成（Generation）
-3. **识别常见失败模式**：了解 RAG 系统中最常见的问题及其根因
-4. **对比 RAG 与微调**：在不同场景下做出正确的技术选型
-
----
-
-## 1. 什么是 RAG？
-
-RAG（Retrieval-Augmented Generation，检索增强生成）是一种将外部知识库与大语言模型结合的技术架构。它的核心思想是：**在生成回答之前，先从知识库中检索相关文档，然后将这些文档作为上下文提供给 LLM**。
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    RAG 核心思想                               │
-│                                                             │
-│   用户提问 ──▶ 检索相关文档 ──▶ 文档 + 问题 ──▶ LLM 生成回答  │
-│                                                             │
-│   ┌──────────┐    ┌──────────┐    ┌──────────┐             │
-│   │ "什么是   │    │ 找到3篇  │    │ 根据以下  │             │
-│   │  RAG?"   │───▶│ 相关文档 │───▶│ 文档回答  │──▶ 答案     │
-│   └──────────┘    └──────────┘    └──────────┘             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**为什么需要 RAG？**
-
-- LLM 的知识截止到训练数据，无法获取最新信息
-- LLM 可能产生幻觉（Hallucination），生成虚假信息
-- 企业私有数据不在 LLM 的训练集中
-- 微调成本高，且难以实时更新知识
-
----
-
-## 2. 三种 RAG 范式
-
-### 2.1 Naive RAG（朴素 RAG）
-
-最简单的 RAG 实现，流程固定：查询 → 检索 → 生成。
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Naive RAG 流程                          │
-│                                                             │
-│  ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐  │
-│  │  用户    │    │ 向量    │    │  Top-K  │    │  LLM    │  │
-│  │  查询    │───▶│ 检索    │───▶│  文档   │───▶│  生成    │  │
-│  └─────────┘    └─────────┘    └─────────┘    └─────────┘  │
-│                                                             │
-│  特点: 简单直接，但存在检索质量依赖、上下文窗口浪费等问题       │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**优点：** 实现简单，快速上手
-**缺点：** 检索精度依赖 embedding 质量，无法处理复杂查询
-
-### 2.2 Advanced RAG（进阶 RAG）
-
-在 Naive RAG 基础上，增加了预检索和后检索优化。
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Advanced RAG 流程                         │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │                 预检索优化                            │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │    │
-│  │  │ 查询重写 │  │ 查询扩展 │  │ 查询路由 │          │    │
-│  │  └──────────┘  └──────────┘  └──────────┘          │    │
-│  └───────────────────────┬─────────────────────────────┘    │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │                 检索阶段                              │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │    │
-│  │  │ 混合检索 │  │ 元数据过滤│  │ 重排序   │          │    │
-│  │  └──────────┘  └──────────┘  └──────────┘          │    │
-│  └───────────────────────┬─────────────────────────────┘    │
-│                          ▼                                  │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │                 后检索优化                            │    │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │    │
-│  │  │ 文档压缩 │  │ 上下文   │  │ 答案验证 │          │    │
-│  │  │          │  │ 融合     │  │          │          │    │
-│  │  └──────────┘  └──────────┘  └──────────┘          │    │
-│  └───────────────────────┬─────────────────────────────┘    │
-│                          ▼                                  │
-│                    ┌──────────┐                             │
-│                    │ LLM 生成 │                             │
-│                    └──────────┘                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2.3 Modular RAG（模块化 RAG）
-
-将 RAG 系统拆分为可组合的模块，支持灵活编排。
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Modular RAG 架构                          │
-│                                                             │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐      │
-│   │ 路由模块 │  │ 检索模块 │  │ 重排模块 │  │ 生成模块 │      │
-│   └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘      │
-│        │            │            │            │             │
-│   ┌────┴────┐  ┌────┴────┐  ┌────┴────┐  ┌────┴────┐      │
-│   │自适应   │  │多路检索 │  │交叉编码 │  │引用生成 │      │
-│   │路由     │  │融合     │  │器重排   │  │验证     │      │
-│   └─────────┘  └─────────┘  └─────────┘  └─────────┘      │
-│                                                             │
-│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐      │
-│   │记忆模块 │  │ 缓存模块│  │评估模块 │  │反馈模块 │      │
-│   └─────────┘  └─────────┘  └─────────┘  └─────────┘      │
-│                                                             │
-│   特点: 模块可插拔、可替换、可组合，支持复杂工作流              │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 3. RAG 三阶段流水线
-
-### 3.1 阶段一：索引（Indexing）
-
-```
-原始文档 ──▶ 文档解析 ──▶ 文本分块 ──▶ Embedding ──▶ 向量存储
-```
-
-索引阶段负责将原始文档转换为可检索的向量表示：
-
-1. **文档解析**：从 PDF、Word、HTML 等格式中提取文本
-2. **文本分块**：将长文档切分为合适大小的片段
-3. **Embedding**：将文本转换为高维向量
-4. **向量存储**：将向量存入向量数据库
-
-### 3.2 阶段二：检索（Retrieval）
-
-```
-用户查询 ──▶ 查询处理 ──▶ 向量检索 ──▶ 重排序 ──▶ 相关文档
-```
-
-检索阶段负责根据用户查询找到最相关的文档：
-
-1. **查询处理**：查询重写、扩展、分解
-2. **向量检索**：在向量数据库中搜索相似向量
-3. **重排序**：对检索结果进行精细排序
-4. **过滤**：根据元数据过滤结果
-
-### 3.3 阶段三：生成（Generation）
-
-```
-相关文档 + 用户查询 ──▶ Prompt 构建 ──▶ LLM 生成 ──▶ 答案 + 引用
-```
-
-生成阶段负责基于检索结果生成回答：
-
-1. **Prompt 构建**：将检索文档和查询组合成 prompt
-2. **LLM 生成**：调用 LLM 生成回答
-3. **后处理**：添加引用、验证答案、格式化输出
-
----
-
-## 4. 常见失败模式
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                  RAG 常见失败模式                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  1. 检索失败                                                │
-│     ├── 语义不匹配：查询和文档用词不同但含义相同              │
-│     ├── 关键信息丢失：分块切断了关键上下文                    │
-│     └── Top-K 不足：返回结果太少，遗漏关键文档               │
-│                                                             │
-│  2. 生成失败                                                │
-│     ├── 幻觉：LLM 编造了文档中不存在的信息                   │
-│     ├── 忽略上下文：LLM 没有参考检索到的文档                 │
-│     └── 信息过载：上下文太长，关键信息被淹没                  │
-│                                                             │
-│  3. 系统失败                                                │
-│     ├── 延迟过高：检索+生成耗时太长                          │
-│     ├── 成本失控：token 使用量超出预算                        │
-│     └── 数据过时：知识库没有及时更新                          │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 5. RAG vs Fine-tuning vs Prompt Engineering
-
-| 维度 | RAG | Fine-tuning | Prompt Engineering |
-|------|-----|-------------|-------------------|
-| **知识更新** | 实时更新，修改知识库即可 | 需要重新训练 | 无法添加新知识 |
-| **成本** | 中等（向量数据库 + 检索） | 高（训练资源） | 低（仅 prompt） |
-| **准确性** | 高（有引用来源） | 中等（可能过拟合） | 低（依赖 LLM 内部知识） |
-| **可解释性** | 高（可追溯来源） | 低（黑盒） | 低 |
-| **适用场景** | 知识密集型问答 | 风格/格式调整 | 简单任务 |
-| **延迟** | 中等（检索 + 生成） | 低（仅生成） | 低（仅生成） |
-| **幻觉控制** | 好（有事实依据） | 中等 | 差 |
-| **实现复杂度** | 中等 | 高 | 低 |
-
-**选型建议：**
-- 需要最新知识 → RAG
-- 需要特定风格/格式 → Fine-tuning
-- 简单任务、预算有限 → Prompt Engineering
-- 企业知识库问答 → RAG（首选）
-
----
-
-## 6. 代码实战
-
-### 6.1 使用 LangChain 构建基础 RAG
+回到开头的故障。我们先不猜原因，直接看数据。
 
 ```python
-"""
-LangChain 基础 RAG 实现
-演示索引、检索、生成三个阶段
-"""
+import os
+from openai import OpenAI
+from pymilvus import MilvusClient
 
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain.chains import RetrievalQA
+client = OpenAI()
+milvus = MilvusClient(uri="http://localhost:19530")
 
-# ========== 阶段一：索引 ==========
+query = "如何退货"
 
-# 1. 加载文档
-loader = TextLoader("knowledge_base.txt", encoding="utf-8")
-documents = loader.load()
-
-# 2. 文本分块
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,        # 每个块最大 500 字符
-    chunk_overlap=50,      # 块之间重叠 50 字符
-    separators=["\n\n", "\n", "。", "，", " "]  # 中文分隔符
+# 看 embedding 向量长什么样
+response = client.embeddings.create(
+    model="text-embedding-3-small",
+    input=query
 )
-chunks = text_splitter.split_documents(documents)
-print(f"文档被切分为 {len(chunks)} 个块")
+query_vector = response.data[0].embedding
+print(f"Query embedding 维度: {len(query_vector)}")
 
-# 3. 创建向量数据库
-embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-vectorstore = Chroma.from_documents(
-    documents=chunks,
-    embedding=embeddings,
-    persist_directory="./chroma_db"  # 持久化存储
+# 看检索实际返回了什么
+results = milvus.search(
+    collection_name="customer_service",
+    data=[query_vector],
+    limit=5,
+    output_fields=["text", "source"]
 )
 
-# ========== 阶段二：检索 ==========
-
-# 创建检索器
-retriever = vectorstore.as_retriever(
-    search_type="similarity",  # 相似度检索
-    search_kwargs={"k": 3}     # 返回 Top 3
-)
-
-# ========== 阶段三：生成 ==========
-
-# 创建 QA 链
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-qa_chain = RetrievalQA.from_chain_type(
-    llm=llm,
-    chain_type="stuff",  # 将所有文档拼接后传入
-    retriever=retriever,
-    return_source_documents=True  # 返回源文档
-)
-
-# 查询
-result = qa_chain.invoke({"query": "什么是 RAG?"})
-print(f"回答: {result['result']}")
-print(f"来源: {[doc.metadata for doc in result['source_documents']]}")
+for i, hit in enumerate(results[0]):
+    print(f"\n--- 结果 {i+1} (score: {hit['distance']:.4f}) ---")
+    print(f"来源: {hit['entity']['source']}")
+    print(f"内容: {hit['entity']['text'][:200]}")
 ```
 
-### 6.2 使用 LlamaIndex 构建基础 RAG
+运行后你会发现：返回的 5 条结果里，3 条是关于"下单流程"的，1 条是"支付问题"，只有 1 条提到了"退货"但只截取了半句话。
+
+**根因不在模型，而在上游**。接下来逐层排查。
+
+## 2. 索引阶段：文档是怎么变成向量的
+
+索引阶段做三件事：解析文档 → 分块 → 向量化。每一步都可能引入问题。
+
+```text
+文档 "退货政策.md"
+    │
+    ▼ 解析
+纯文本: "退货需在收到商品后7天内申请。退款将在3个工作日内到账..."
+    │
+    ▼ 分块 (假设 chunk_size=200, overlap=50)
+Chunk 1: "退货需在收到商品后7天内申请。退款将在"
+Chunk 2: "到账。退货流程：1. 打开APP 2. 找到订单 3. 点击退货..."
+    │
+    ▼ Embedding
+向量 [0.023, -0.156, 0.089, ...] (1536维)
+```
+
+问题在这里：Chunk 1 把"退款将在"截断了，Chunk 2 从"到账"开始。两段话各自不完整，embedding 模型拿到残缺文本，生成的向量自然偏离真实语义。
+
+这引出一个关键判断：**分块策略直接决定检索质量的上限**。embedding 模型再好，也救不了被截断的文本。后面 stage1 的第 3 课会专门讲分块策略。
+
+## 3. 检索阶段：向量相似度不等于语义相关
+
+假设分块没问题，检索阶段还有自己的坑。
 
 ```python
-"""
-LlamaIndex 基础 RAG 实现
-演示从文档加载到查询的完整流程
-"""
+# 两种常见失败模式
 
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
-from llama_index.core.node_parser import SentenceSplitter
-from llama_index.llms.openai import OpenAI
+# 失败模式 1：语义漂移
+# Query: "退货流程"
+# 检索结果: "退换货政策概述" (相关) vs "换货流程详解" (更近但不完全匹配)
+# 向量距离可能后者更近，但用户要的是"退货"不是"换货"
 
-# ========== 阶段一：索引 ==========
-
-# 1. 加载文档
-documents = SimpleDirectoryReader(
-    input_dir="./knowledge_base",
-    recursive=True
-).load_data()
-print(f"加载了 {len(documents)} 个文档")
-
-# 2. 配置分块器
-node_parser = SentenceSplitter(
-    chunk_size=500,
-    chunk_overlap=50
-)
-
-# 3. 创建索引（自动完成分块、embedding、存储）
-index = VectorStoreIndex.from_documents(
-    documents,
-    transformations=[node_parser],
-    show_progress=True
-)
-
-# ========== 阶段二 & 三：检索 + 生成 ==========
-
-# 创建查询引擎
-query_engine = index.as_query_engine(
-    similarity_top_k=3,  # 返回 Top 3
-    llm=OpenAI(model="gpt-4o-mini", temperature=0)
-)
-
-# 查询
-response = query_engine.query("什么是 RAG?")
-print(f"回答: {response.response}")
-print(f"来源节点: {[node.metadata for node in response.source_nodes]}")
+# 失败模式 2：精确术语丢失
+# Query: "ERR-0x80070005"
+# 向量检索会把错误码"理解"成语义，返回完全不相关的文档
+# 这种情况需要关键词检索兜底 (Stage 2 会讲混合检索)
 ```
 
----
+向量检索的本质是"语义模糊匹配"。它擅长理解"退款流程"和"退货步骤"是同一件事，但不擅长精确匹配型号、编号、错误码。这是向量检索的固有边界，不是 bug。
 
-## 7. 常见误区
+## 4. 生成阶段：找到文档不代表答案正确
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    常见错误 TOP 5                             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ❌ 错误 1: 分块大小设置不当                                  │
-│     ✓ 正确: 根据文档类型和 LLM 上下文窗口调整                 │
-│                                                             │
-│  ❌ 错误 2: 忽略 chunk_overlap                                │
-│     ✓ 正确: 设置 10-20% 的重叠，避免信息断裂                  │
-│                                                             │
-│  ❌ 错误 3: 直接用原始查询检索                                │
-│     ✓ 正确: 对查询进行改写、扩展，提升召回率                   │
-│                                                             │
-│  ❌ 错误 4: 不做重排序                                        │
-│     ✓ 正确: 使用 cross-encoder 对结果重排序                   │
-│                                                             │
-│  ❌ 错误 5: 忽略元数据                                        │
-│     ✓ 正确: 保留文档来源、时间等元数据，支持过滤               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+即使检索到了正确文档，LLM 也可能生成错误答案。
+
+```text
+检索结果: "退货需在收到商品后7天内申请"
+用户问题: "我买了10天了还能退吗？"
+
+# LLM 可能的回答:
+"可以的，退货没有时间限制。"  ← 幻觉：检索结果说了7天，LLM 忽略了
+"不可以，超过7天无法退货。"    ← 正确引用了检索结果
+"建议联系客服咨询。"           ← 安全但没有回答问题
 ```
 
----
+这引出 RAG 系统最重要的质量指标之一：**Faithfulness（忠实度）**——生成的答案是否忠实于检索到的文档。Stage 5 会系统讲评估。
 
-## 8. 工程建议
+## 5. 三种 RAG 范式
 
-1. **先跑通 Naive RAG 再优化**：不要一开始就追求 Advanced RAG 的所有特性。先用最简单的流程验证数据质量和检索效果，再逐步加入查询改写、重排序等优化手段。
-2. **建立评估基线**：在做任何优化之前，先用一组固定的测试问题记录 Recall@5 和答案质量分数。后续每一步优化都要与基线对比，避免"优化了 A 但搞砸了 B"的情况。
-3. **分层设计故障处理**：检索阶段可能返回空结果或低相关结果，生成阶段可能产生幻觉。每一层都需要独立的降级策略，而不是假设上游总是正常工作。
-4. **监控 token 消耗**：RAG 系统的成本主要来自 Embedding 调用和 LLM 生成。建议在生产环境中记录每次查询的输入 token 数、输出 token 数和响应延迟，及时发现成本异常。
+理解了各环节的失败模式，我们来看 RAG 架构的演进。
 
----
+```text
+Naive RAG (你现在的系统)
+  文档 → 分块 → 向量化 → 检索 → 生成
+  问题：每个环节都是"傻瓜式"执行，没有反馈
 
-## 9. 本课总结
+Advanced RAG (本课程的重点)
+  在 Naive RAG 基础上加了优化层：
+  - 检索前：查询改写、查询扩展
+  - 检索中：混合检索、重排序
+  - 检索后：上下文压缩、相关性过滤
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Lesson 1 总结                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ✅ RAG 三种范式:                                            │
-│     - Naive RAG: 简单直接，适合快速原型                       │
-│     - Advanced RAG: 预检索+后检索优化，适合生产环境            │
-│     - Modular RAG: 模块化架构，适合复杂系统                   │
-│                                                             │
-│  ✅ 三阶段流水线:                                            │
-│     - 索引: 文档解析 → 分块 → Embedding → 存储               │
-│     - 检索: 查询处理 → 向量检索 → 重排序 → 过滤              │
-│     - 生成: Prompt 构建 → LLM 生成 → 后处理                  │
-│                                                             │
-│  ✅ 常见失败模式:                                            │
-│     - 检索失败: 语义不匹配、分块切断上下文                    │
-│     - 生成失败: 幻觉、忽略上下文                             │
-│     - 系统失败: 延迟、成本、数据过时                          │
-│                                                             │
-│  ✅ RAG vs Fine-tuning:                                      │
-│     - 知识密集型 → RAG                                       │
-│     - 风格调整 → Fine-tuning                                 │
-│     - 简单任务 → Prompt Engineering                          │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+Modular RAG (Stage 3 会讲)
+  把 RAG 拆成可插拔的模块，按需组合：
+  - Self-RAG：让模型自己决定是否需要检索
+  - Agentic RAG：用 Agent 规划多步检索
+  - GraphRAG：用知识图谱增强关系推理
 ```
 
----
+大多数生产系统处于 Advanced RAG 阶段。Modular RAG 更适合复杂场景，但工程成本也更高。
 
-## 10. 练习题
+## 6. RAG vs 微调：什么时候该选哪个
 
-### 练习 1：理解 RAG 范式
-画出 Naive RAG 和 Advanced RAG 的流程图，标注每个阶段的输入和输出。思考：在什么场景下 Naive RAG 就足够了？
+这是技术选型中最常见的困惑。
 
-### 练习 2：实现基础 RAG
-使用 LangChain 或 LlamaIndex，对你自己的文档（可以是任意 txt 文件）构建一个基础 RAG 系统。尝试调整 `chunk_size` 和 `k` 值，观察对结果的影响。
+```text
+选 RAG 的场景：
+  - 知识频繁更新（产品文档、政策法规）
+  - 需要引用来源（客服、法律、医疗）
+  - 数据量大且结构多样
+  - 不想重新训练模型
 
-### 练习 3：失败模式分析
-给定以下 RAG 系统的错误日志，分析可能的失败原因并提出改进方案：
+选微调的场景：
+  - 需要改变模型的风格或格式（特定行业术语）
+  - 任务固定且数据稳定（情感分类、实体提取）
+  - 延迟要求极高（不想做检索）
+  - 需要模型"记住"特定模式而非特定事实
+
+两者可以结合：
+  微调让模型更擅长"利用"检索结果，RAG 提供最新知识
 ```
-用户问题: "公司的年假政策是什么？"
-检索结果: [关于公司文化的文档, 关于办公环境的文档, 关于员工手册的文档]
-LLM 回答: "根据文档，公司注重员工的工作生活平衡..."
-实际答案: 应该检索到《员工手册》中关于年假的具体条款
-```
 
----
+## 练习
 
-## 下一课
+### 练习一：复现检索失败
 
-👉 [Lesson 2: 文档解析进阶 - 表格与图片](./02-文档解析进阶-表格与图片.md)
+用上面的代码，连接你自己的向量数据库，搜索一个你知道数据库里有答案的问题，但故意用不同的措辞提问。观察返回结果是否仍然相关。
+
+记录：
+1. 你的 query 和数据库中实际文档的措辞差异
+2. 返回的 top-5 结果中，有几条是真正相关的
+3. 如果不相关，分析是分块问题、embedding 问题、还是检索策略问题
+
+### 练习二：画出你的 RAG 系统的失败路径
+
+在纸上（或用 ASCII）画出你当前 RAG 系统的完整流程，在每个环节标注：
+- 这一步可能的失败模式
+- 失败时的可观测现象（日志里会看到什么）
+- 目前有没有对应的监控
+
+这个图会贯穿整个课程，后面每学一个优化技术，你都可以把它加到对应的位置。
 
 ---
 
 ## 参考答案
 
-### 练习 1：理解 RAG 范式
+### 练习一
 
-**思路**：Naive RAG 是最简单的线性流程，适合快速验证想法；Advanced RAG 在检索前后各加了优化层，适合生产环境提升质量。关键区别在于是否有查询预处理和后检索优化。
+关键不是结果好坏，而是观察过程。如果 top-5 里只有 1-2 条相关，问题大概率出在：
+- chunk_size 太大，把不同主题的内容混在一起
+- embedding 模型对你的领域术语理解不足
+- 需要加关键词检索作为补充（Stage 2 会详细讲）
 
-**答案**：
+### 练习二
 
-Naive RAG 流程图：
-```
-用户查询 ──▶ 向量检索 ──▶ Top-K 文档 ──▶ LLM 生成 ──▶ 回答
-```
+一个典型的失败路径图：
 
-Advanced RAG 流程图：
-```
-用户查询 ──▶ 查询重写/扩展 ──▶ 向量检索 ──▶ 重排序 ──▶ 文档压缩 ──▶ LLM 生成 ──▶ 回答
-```
-
-Naive RAG 足够的场景：
-- 内部 FAQ 系统：问题和文档用词高度一致，语义歧义少
-- 快速原型验证：需要在几小时内验证 RAG 方案是否可行
-- 文档量小（<100 篇）且查询简单的场景
-- 对回答质量要求不高的 Demo 或概念验证
-
-```python
-# Naive RAG 示例：3 行核心代码
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-qa_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever)
-result = qa_chain.invoke({"query": "用户问题"})
+```text
+用户提问
+  │
+  ├─ Query 理解失败 → 返回无关结果 → LLM 编造答案
+  │
+  ├─ Embedding 失败 → 向量质量差 → 检索偏离
+  │
+  ├─ 分块截断 → 信息不完整 → 答案不准确
+  │
+  ├─ 检索返回无关文档 → LLM 被误导 → 幻觉
+  │
+  └─ LLM 忽略检索结果 → 直接编造 → Faithfulness=0
 ```
 
-**要点**：
-- Naive RAG 是"查询→检索→生成"的线性管道，没有预处理和后处理优化
-- Advanced RAG 增加了查询改写、混合检索、重排序、文档压缩等优化步骤
-- 选型取决于数据规模、查询复杂度和质量要求——小规模简单场景用 Naive RAG 即可
-
----
-
-### 练习 2：实现基础 RAG
-
-**思路**：使用 LangChain 的 `RecursiveCharacterTextSplitter` 和 `Chroma` 构建完整 RAG 管道。重点观察 chunk_size 和 k 值对检索结果的影响——chunk_size 越大上下文越完整但检索越粗，k 值越大召回越多但可能引入噪声。
-
-**答案**：
-
-```python
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import Chroma
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import TextLoader
-from langchain.chains import RetrievalQA
-
-# 1. 加载文档
-loader = TextLoader("my_document.txt", encoding="utf-8")
-documents = loader.load()
-
-# 2. 分块（尝试不同参数）
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,
-    chunk_overlap=50,
-    separators=["\n\n", "\n", "。", "，", " "]
-)
-chunks = text_splitter.split_documents(documents)
-
-# 3. 创建向量库
-embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-vectorstore = Chroma.from_documents(chunks, embeddings)
-
-# 4. 检索 + 生成
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-qa = RetrievalQA.from_chain_type(
-    llm=llm,
-    chain_type="stuff",
-    retriever=vectorstore.as_retriever(search_kwargs={"k": 3}),
-    return_source_documents=True
-)
-
-# 5. 测试不同参数组合
-for chunk_size in [200, 500, 1000]:
-    for k in [1, 3, 5]:
-        # 重新分块和索引
-        splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=50)
-        docs = splitter.split_documents(documents)
-        vs = Chroma.from_documents(docs, embeddings)
-        result = vs.as_retriever(search_kwargs={"k": k}).invoke("你的测试问题")
-        print(f"chunk_size={chunk_size}, k={k}: 找到 {len(result)} 个文档")
-```
-
-**要点**：
-- chunk_size 从 200 增加到 1000 时，检索到的内容更完整但精度可能下降
-- k 值增大能提高召回率，但过多无关文档会干扰 LLM 生成
-- 建议先用 chunk_size=500、k=3 作为基线，再根据实际效果微调
-
----
-
-### 练习 3：失败模式分析
-
-**思路**：从错误日志看，检索阶段返回了相关度较低的文档（公司文化、办公环境），而真正包含年假政策的《员工手册》没有被检索到。这是典型的"语义不匹配"失败模式——用户的查询用词（"年假政策"）和文档中的表述可能不同。
-
-**答案**：
-
-失败原因分析：
-1. **检索失败（主因）**：查询"年假政策"与文档中"带薪休假制度""年假天数规定"等表述存在语义差距，embedding 模型未能捕捉到这种关联
-2. **分块问题**：《员工手册》中关于年假的条款可能被切分到不同块中，单独的块缺乏"年假政策"的完整语义
-3. **Top-K 不足**：k=3 可能不够，相关文档排在第 4-5 位被截断
-
-改进方案：
-
-```python
-# 方案 1：查询改写 — 扩展同义词
-def rewrite_query(query: str) -> list[str]:
-    synonyms = {
-        "年假": ["带薪休假", "年休假", "假期", "休假制度"],
-        "政策": ["规定", "制度", "条款", "办法"],
-    }
-    expanded = [query]
-    for key, values in synonyms.items():
-        if key in query:
-            for v in values:
-                expanded.append(query.replace(key, v))
-    return expanded
-
-# 方案 2：增大 k 值 + 重排序
-retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
-
-# 方案 3：添加元数据过滤 — 优先搜索《员工手册》
-retriever = vectorstore.as_retriever(
-    search_kwargs={"k": 5, "filter": {"source": "员工手册.pdf"}}
-)
-```
-
-**要点**：
-- 语义不匹配是 RAG 最常见的检索失败模式，查询改写能有效缓解
-- 元数据过滤（指定文档来源）是最直接的解决方案
-- 建立评估基线：用已知正确答案的查询测试检索效果，量化 Recall@K
+每一步都需要对应的日志和指标。Stage 4 会讲可观测性，Stage 5 会讲评估体系。
