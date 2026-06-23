@@ -15,7 +15,7 @@
 
 ## 1. 项目定位
 
-这是一个面向已有前端或编程基础学习者的系统化技术课程仓库，覆盖 AI 应用、Agent、RAG、前端工程、后端工程、DevOps、数据工程、性能、测试、系统设计等方向。
+这是一个面向已有前端或编程基础学习者的系统化技术课程仓库，覆盖 AI 应用、Agent、RAG、前端工程（含 Web 3D/Shader/创意编码）、后端工程（含网络/操作系统/HTTP 深度）、DevOps、数据工程、性能、测试、系统设计等方向，共 53 门课程。
 
 课程的目标不是罗列知识点，而是帮助读者建立真实工程中的判断能力：
 
@@ -42,11 +42,11 @@ ai-learning-tutorials/
 │   ├── 06-llm-finetuning/
 │   ├── 07-multimodal-ai/
 │   └── graduation-project/
-├── ai-specialization/             # AI 专项进阶
-├── frontend/                      # 前端方向
-├── backend/                       # 后端方向
-├── devops/                        # 工程与运维
-├── data/                          # 数据方向
+├── ai-specialization/             # AI 专项进阶（10 门）
+├── frontend/                      # 前端方向（18 门）
+├── backend/                       # 后端方向（7 门）
+├── devops/                        # 工程与运维（8 门）
+├── data/                          # 数据方向（2 门）
 ├── README.md
 ├── AGENTS.md
 └── COURSE_DESIGN_REVIEW.md
