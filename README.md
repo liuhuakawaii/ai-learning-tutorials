@@ -125,16 +125,16 @@ ai-learning-tutorials/
 | [motion-design](./frontend/motion-design/) | 技术动画与动效 | CSS 动画 / GSAP / Three.js / 粒子系统 / 性能优化，30 课时 | 已完成 |
 | [browser-extension](./frontend/browser-extension/) | 浏览器扩展开发 | Manifest V3 / AI 扩展 / 跨浏览器 / 商业化，30 课时 | 已完成 |
 | [audio-video-engineering](./frontend/audio-video-engineering/) | 音视频工程 | Web Audio / 视频处理 / 流媒体 / WebRTC / 生产级应用，30 课时 | 已完成 |
-| [threejs-architecture](./frontend/threejs-architecture/) | Three.js 3D 架构设计 | 场景管理 / 组件化 / 性能优化 / 大规模 3D 应用，30 课时 | 已完成 |
-| [immersive-3d-web](./frontend/immersive-3d-web/) | 沉浸式 3D Web 体验 | 全景 / 交互式 3D / WebXR 融合 / 沉浸式叙事，30 课时 | 已完成 |
-| [shader-art](./frontend/shader-art/) | Shader 艺术创作 | GLSL 高级技巧 / 程序化纹理 / 视觉特效 / 创意编码，30 课时 | 已完成 |
-| [webgpu-creative](./frontend/webgpu-creative/) | WebGPU 创意编程 | Compute Shader / 渲染管线 / GPU 计算 / 创意应用，30 课时 | 已完成 |
-| [generative-art-algorithms](./frontend/generative-art-algorithms/) | 生成艺术与算法 | 分形 / 噪声 / 粒子系统 / L-System / 算法美学，30 课时 | 已完成 |
-| [game-physics-engine](./frontend/game-physics-engine/) | 游戏物理引擎 | 刚体 / 碰撞检测 / 约束求解 / 物理模拟 / 游戏引擎架构，30 课时 | 已完成 |
-| [3d-data-visualization](./frontend/3d-data-visualization/) | 3D 数据可视化 | 三维图表 / 地理信息 / 大数据渲染 / 交互式可视化，30 课时 | 已完成 |
-| [procedural-world-generation](./frontend/procedural-world-generation/) | 程序化世界生成 | 地形生成 / 城市生成 / L-System / PCG 算法 / 开放世界，30 课时 | 已完成 |
-| [performance-profiling](./frontend/performance-profiling/) | 性能分析与调优 | Chrome DevTools / 内存分析 / 渲染优化 / 性能监控体系，30 课时 | 已完成 |
-| [frontend-architecture](./frontend/frontend-architecture/) | 前端基建与架构工程 | Monorepo / 组件库 / 构建工具链 / 监控 / 性能 / 微前端 / 脚手架 / CI/CD / 安全，90 课时 | 编写中 |
+| [threejs-architecture](./frontend/threejs-architecture/) | Three.js 3D 架构设计 | 场景管理 / 组件化 / 性能优化 / 大规模 3D 应用，25 课时 | 已完成 |
+| [immersive-3d-web](./frontend/immersive-3d-web/) | 沉浸式 3D Web 体验 | 全景 / 交互式 3D / WebXR 融合 / 沉浸式叙事，25 课时 | 已完成 |
+| [shader-art](./frontend/shader-art/) | Shader 艺术创作 | GLSL 高级技巧 / 程序化纹理 / 视觉特效 / 创意编码，25 课时 | 已完成 |
+| [webgpu-creative](./frontend/webgpu-creative/) | WebGPU 创意编程 | Compute Shader / 渲染管线 / GPU 计算 / 创意应用，25 课时 | 已完成 |
+| [generative-art-algorithms](./frontend/generative-art-algorithms/) | 生成艺术与算法 | 分形 / 噪声 / 粒子系统 / L-System / 算法美学，25 课时 | 已完成 |
+| [game-physics-engine](./frontend/game-physics-engine/) | 游戏物理引擎 | 刚体 / 碰撞检测 / 约束求解 / 物理模拟 / 游戏引擎架构，25 课时 | 已完成 |
+| [3d-data-visualization](./frontend/3d-data-visualization/) | 3D 数据可视化 | 三维图表 / 地理信息 / 大数据渲染 / 交互式可视化，25 课时 | 已完成 |
+| [procedural-world-generation](./frontend/procedural-world-generation/) | 程序化世界生成 | 地形生成 / 城市生成 / L-System / PCG 算法 / 开放世界，25 课时 | 已完成 |
+| [performance-profiling](./frontend/performance-profiling/) | 性能分析与调优 | Chrome DevTools / 内存分析 / 渲染优化 / 性能监控体系，25 课时 | 已完成 |
+| [frontend-architecture](./frontend/frontend-architecture/) | 前端基建与架构工程 | Monorepo / 组件库 / 构建工具链 / 监控 / 性能 / 微前端 / 脚手架 / CI/CD / 安全，90 课时 | 已完成 |
 
 ### 后端方向
 
@@ -144,9 +144,9 @@ ai-learning-tutorials/
 | [typescript-engineering](./backend/typescript-engineering/) | TypeScript 工程化 | 类型系统 / 设计模式 / Monorepo / 测试体系 / 生产架构，30 课时 | 已完成 |
 | [python-spider](./backend/python-spider/) | Python 爬虫 | Python + requests + Playwright + Scrapy，34 课时 | 已完成 |
 | [python-automation](./backend/python-automation/) | Python 自动化脚本 | 文件处理 + Web 自动化 + 系统监控 + 真实项目，30 课时 | 已完成 |
-| [http-deep-dive](./backend/http-deep-dive/) | HTTP 协议深度解析 | HTTP/1.1 / HTTP/2 / HTTP/3 / 抓包分析 / 性能优化，30 课时 | 已完成 |
-| [networking-deep-dive](./backend/networking-deep-dive/) | 计算机网络深度探索 | TCP/IP / DNS / TLS / 网络编程 / 网络调试，30 课时 | 已完成 |
-| [os-for-developers](./backend/os-for-developers/) | 面向开发者的操作系统 | 进程 / 内存 / 文件系统 / IO 模型 / 系统调用，30 课时 | 已完成 |
+| [http-deep-dive](./backend/http-deep-dive/) | HTTP 协议深度解析 | HTTP/1.1 / HTTP/2 / HTTP/3 / 抓包分析 / 性能优化，25 课时 | 已完成 |
+| [networking-deep-dive](./backend/networking-deep-dive/) | 计算机网络深度探索 | TCP/IP / DNS / TLS / 网络编程 / 网络调试，25 课时 | 已完成 |
+| [os-for-developers](./backend/os-for-developers/) | 面向开发者的操作系统 | 进程 / 内存 / 文件系统 / IO 模型 / 系统调用，25 课时 | 已完成 |
 
 ### 工程与运维
 
@@ -159,7 +159,7 @@ ai-learning-tutorials/
 | [lowcode-platform](./devops/lowcode-platform/) | 低代码/无代码平台 | 数据建模 / 应用搭建 / AI 集成 / 自定义组件 / 企业级部署，30 课时 | 已完成 |
 | [workflow-automation](./devops/workflow-automation/) | 自动化工作流 | n8n / AI 工作流 / 企业集成 / 监控告警 / 规模化部署，30 课时 | 已完成 |
 | [engineering-leadership](./devops/engineering-leadership/) | 工程管理与技术领导力 | 管理转型 / 团队建设 / 技术战略 / 执行交付 / 职业成长，30 课时 | 已完成 |
-| [github-actions-deep-dive](./devops/github-actions-deep-dive/) | GitHub Actions 深度实践 | 自定义 Action / 矩阵构建 / 复用工作流 / 安全与优化，30 课时 | 已完成 |
+| [github-actions-deep-dive](./devops/github-actions-deep-dive/) | GitHub Actions 深度实践 | 自定义 Action / 矩阵构建 / 复用工作流 / 安全与优化，25 课时 | 已完成 |
 
 ### 数据方向
 
